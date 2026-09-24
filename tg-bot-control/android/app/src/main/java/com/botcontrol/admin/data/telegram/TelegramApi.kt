@@ -302,7 +302,7 @@ class TelegramApi(private val token: String) {
         channel: String,
         text: String,
         inlineMenu: List<InlineBtn> = emptyList(),
-    ): Result<Unit> = withContext(Dispatchers.IO) {
+    ): Result<Int> = withContext(Dispatchers.IO) {
         try {
             val payloadMap = mutableMapOf<String, Any>(
                 "chat_id" to channel, "text" to text.take(4000))
@@ -313,8 +313,11 @@ class TelegramApi(private val token: String) {
             val payload = Gson().toJson(payloadMap).toRequestBody(json)
             fastClient.newCall(Request.Builder().url(url("sendMessage")).post(payload).build())
                 .execute().use { resp ->
-                    if (resp.isSuccessful) Result.success(Unit)
-                    else Result.failure(IllegalStateException("sendMessage HTTP ${resp.code}"))
+                    // message_id поста нужен, чтобы потом удалить его из канала.
+                    val body = resp.body?.string().orEmpty()
+                    if (resp.isSuccessful) Result.success(
+                        parse(body) { it.getAsJsonObject("result")?.get("message_id")?.asInt ?: 0 })
+                    else Result.failure(IllegalStateException("sendMessage HTTP ${resp.code}: ${body.take(200)}"))
                 }
         } catch (e: Throwable) {
             Result.failure(e)
@@ -368,10 +371,14 @@ class TelegramApi(private val token: String) {
                     mapOf("chat_id" to chatId, "message_id" to messageId)).toRequestBody(json)
                 fastClient.newCall(Request.Builder().url(url("deleteMessage")).post(payload).build())
                     .execute().use { resp ->
-                        // «message to delete not found» — не ошибка для нас.
-                        if (resp.code == 400) Result.success(Unit)
-                        else if (resp.isSuccessful) Result.success(Unit)
-                        else Result.failure(IllegalStateException("deleteMessage HTTP ${resp.code}"))
+                        val body = resp.body?.string().orEmpty()
+                        // «message to delete not found» — уже удалено, не ошибка.
+                        // Остальные 400 («message can't be deleted» — нет прав
+                        // или пост старше 48 ч) — ошибка: сообщаем, а не молчим.
+                        if (resp.isSuccessful) Result.success(Unit)
+                        else if (resp.code == 400 && body.contains("not found", ignoreCase = true)) Result.success(Unit)
+                        else Result.failure(IllegalStateException(
+                            "deleteMessage HTTP ${resp.code}: ${body.substringAfter("\"description\":\"", body).substringBefore("\"").take(160)}"))
                     }
             } catch (e: Throwable) {
                 Result.failure(e)

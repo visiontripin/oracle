@@ -384,13 +384,31 @@ object ListingEngine {
                     return
                 }
                 val channel = store.channelId(botId)
+                val failed = mutableListOf<Int>()
+                var lastError = ""
                 target.messageIds.forEach { mid ->
-                    api.deleteMessage(channel, mid)
+                    api.deleteMessage(channel, mid).onFailure { e ->
+                        failed.add(mid); lastError = e.message.orEmpty()
+                    }
                 }
-                store.setListings(all.filterNot { it.id == id }, botId)
-                api.answerCallbackQuery(callbackId, "🗑 Удалено")
-                DeviceLlm.log("🗑 [$botId] Объявление ${target.id} удалено из канала (${target.messageIds.size} сообщ.)")
-                api.editMessageText(chatId, messageId, "🗑 Объявление удалено из канала.\n\nВыбери действие 👇")
+                val removed = target.messageIds.size - failed.size
+                if (failed.isEmpty()) {
+                    store.setListings(all.filterNot { it.id == id }, botId)
+                    api.answerCallbackQuery(callbackId, "🗑 Удалено")
+                    DeviceLlm.log("🗑 [$botId] Объявление ${target.id} удалено из канала (сообщ.: $removed)")
+                    api.editMessageText(chatId, messageId, "🗑 Объявление удалено из канала.\n\nВыбери действие 👇")
+                } else {
+                    // Не удалось — объявление остаётся в списке с неудалёнными
+                    // сообщениями, чтобы можно было повторить.
+                    store.setListings(all.map { if (it.id == id) it.copy(messageIds = failed) else it }, botId)
+                    api.answerCallbackQuery(callbackId, "⚠️ Удалено не всё")
+                    DeviceLlm.log("⚠️ [$botId] Объявление ${target.id}: удалено $removed, не удалось ${failed.size}: ${lastError.take(120)}")
+                    api.editMessageText(chatId, messageId,
+                        "⚠️ Удалено сообщений: $removed, не удалось: ${failed.size}.\n" +
+                            "Причина: ${lastError.take(120)}\n\n" +
+                            "Проверь, что бот — админ канала с правом «Удалять сообщения». " +
+                            "Посты старше 48 ч Telegram может не дать удалить — тогда убери вручную.")
+                }
                 api.sendMessage(chatId, "Главное меню 👇", keyboard = menuWith(replyKeyboard))
             }
             data.startsWith("lst_rep_") -> {
@@ -505,9 +523,9 @@ object ListingEngine {
         var publishError = ""
         val media = d.photos.mapNotNull { name -> BotFiles.safe(context, botId, BotFiles.MEDIA, name) }
         if (media.isEmpty()) {
-            // Текстовый пост без фото: message_id недоступен (sendMessage его
-            // не возвращает) — удаление такого поста делаем вручную в канале.
+            // Текстовый пост без фото: сохраняем message_id — чтобы удалять.
             api.sendTo(channel, caption, listOfNotNull(authorBtn))
+                .onSuccess { mid -> if (mid > 0) messageIds.add(mid) }
                 .onFailure { publishError = it.message ?: "" }
         } else {
             media.forEachIndexed { i, f ->
@@ -525,6 +543,24 @@ object ListingEngine {
         // сохранить/заменить
         val all = store.listings(botId).toMutableList()
         val listingId = d.editingId ?: ("L" + System.currentTimeMillis() / 1000)
+        // Переопубликация: новый пост уже в канале — убираем старый,
+        // чтобы в канале было ОДНО объявление. Раньше старые id терялись,
+        // и «Удалить» убирало только последний пост. Что удалить не вышло
+        // (нет прав / старше 48 ч), продолжаем помнить — удалим позже.
+        val previous = all.firstOrNull { it.id == listingId }
+        val leftover = mutableListOf<Int>()
+        if (previous != null) {
+            val oldIds = previous.messageIds.filter { it !in messageIds }
+            for (mid in oldIds) {
+                api.deleteMessage(channel, mid).onFailure { e ->
+                    leftover.add(mid)
+                    DeviceLlm.log("⚠️ [$botId] Старый пост $mid не удалён: ${e.message?.take(120)}")
+                }
+            }
+            if (oldIds.isNotEmpty()) {
+                DeviceLlm.log("♻️ [$botId] Переопубликация $listingId: убрано старых сообщ. ${oldIds.size - leftover.size} из ${oldIds.size}")
+            }
+        }
         all.removeAll { it.id == listingId }
         all.add(
             Listing(
@@ -535,7 +571,7 @@ object ListingEngine {
                 contactType = d.contactType,
                 contactValue = d.contactValue,
                 photos = d.photos,
-                messageIds = messageIds,
+                messageIds = messageIds + leftover,
                 createdAt = System.currentTimeMillis() / 1000,
             ),
         )

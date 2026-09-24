@@ -14,8 +14,8 @@ android {
         ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
         minSdk = 26
         targetSdk = 34
-        versionCode = 25
-        versionName = "1.5.5"
+        versionCode = 26
+        versionName = "1.5.6"
     }
 
     // Постоянный debug-ключ в репозитории: APK из CI (GitHub Actions) всегда
