@@ -348,7 +348,10 @@ private suspend fun applyParsed(
         localStore.setKeyboard(kbLabels, botId)
         done.add("кнопок клавиатуры: ${kbLabels.size}")
         val rulesNow = repository.botRules(botId)
-        val listingsOn = localStore.listingsOn(botId)
+        // Режим из этого же импорта применяется ниже — берём его сразу,
+        // иначе кнопки визарда ложно попадают в «без действия».
+        val listingsOn = (if (wanted(ScriptImporter.SEC_CHANNEL)) parsed.listingsOn else null)
+            ?: localStore.listingsOn(botId)
         val noAction = kbLabels.filter { label ->
             // Кнопки визарда («Разместить объявление», «Мои объявления»,
             // «Отмена») действие имеют — их ведёт режим «Объявления».

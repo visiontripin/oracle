@@ -500,6 +500,10 @@ class TelegramApi(private val token: String) {
     private fun InlineBtn.toApi(): Map<String, String> = when {
         url.isNotBlank() -> mapOf("text" to label, "url" to url)
         id.isNotBlank() -> mapOf("text" to label, "callback_data" to id)
+        // Кнопки режима «Объявления» задают только action = "lst_…" (без id).
+        // С v1.5.2 вместо кода уходил хеш надписи ("cb-1230402332") — и
+        // ListingEngine не узнавал свои кнопки: визард вставал на шаге 2.
+        action.startsWith("lst_") -> mapOf("text" to label, "callback_data" to action.take(64))
         else -> mapOf("text" to label, "callback_data" to ("cb" + label.hashCode()))
     }
 }

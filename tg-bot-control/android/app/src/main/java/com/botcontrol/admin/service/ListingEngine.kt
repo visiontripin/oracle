@@ -82,6 +82,26 @@ object ListingEngine {
         )
     }
 
+    /**
+     * Кнопки визарда из сообщений, отправленных v1.5.2–v1.5.4: там вместо
+     * кода «lst_…» в callback_data ушёл "cb" + hashCode(надписи). Статичные
+     * кнопки восстанавливаем по хешу, чтобы уже отправленные сообщения
+     * тоже работали. Возвращает код действия или null.
+     */
+    fun legacyCallback(data: String): String? {
+        if (!data.startsWith("cb")) return null
+        val known = listOf(
+            "✉️ Написать в личку" to "lst_contact_msg",
+            "📞 Указать телефон" to "lst_contact_phone",
+            "✅ Готово, к публикации" to "lst_photos_done",
+            "⏭ Без фото" to "lst_photos_done",
+            BTN_CANCEL to "lst_cancel",
+            "✅ Опубликовать" to "lst_publish",
+            "❌ Отменить" to "lst_preview_cancel",
+        )
+        return known.firstOrNull { ("cb" + it.first.hashCode()) == data }?.second
+    }
+
     /** Текст своего правила /start (если задан) — чтобы не подменять его. */
     private suspend fun ownGreeting(context: Context, botId: Long, firstName: String): String? {
         return try {
@@ -313,6 +333,7 @@ object ListingEngine {
     ) {
         val k = key(botId, chatId)
         val draft = drafts[k]
+        DeviceLlm.log("🔘 Объявления: кнопка '$data' (шаг: ${draft?.state?.name ?: "—"})")
         when {
             data == "lst_cancel" -> {
                 drafts.remove(k)

@@ -302,7 +302,13 @@ class LocalBotService : Service() {
                 chatId = msg.chatId, firstName = msg.firstName,
                 text = text, photoId = msg.photoId, replyKeyboard = keyboard,
             )
-            if (consumed) return
+            if (consumed) {
+                // Раньше эти сообщения не попадали в журнал — не было видно,
+                // что визард вообще сработал.
+                DeviceLlm.log("📩 Сообщение: '${text.take(80)}'")
+                DeviceLlm.log("   • Обработал режим «Объявления»")
+                return
+            }
         } else if (ListingEngine.looksLikeNew(text) || ListingEngine.looksLikeMy(text)) {
             // Режим «Объявления» выключен, а человек явно просит объявление
             // («добавить объявление», /new, «мои объявления») и своего
@@ -370,11 +376,14 @@ class LocalBotService : Service() {
         store.setLastChatId(cb.chatId, botId)
 
         // Кнопки режима объявлений (lst_*) обрабатывает ListingEngine.
-        if (store.listingsOn(botId) && cb.data.startsWith("lst_")) {
+        // legacyCallback — кнопки из сообщений v1.5.2–1.5.4 ("cb<хеш>").
+        val lstData = if (cb.data.startsWith("lst_")) cb.data
+        else if (store.listingsOn(botId)) ListingEngine.legacyCallback(cb.data) else null
+        if (store.listingsOn(botId) && lstData != null) {
             ListingEngine.handleCallback(
                 context = this, store = store, api = api, botId = botId,
                 chatId = cb.chatId, messageId = cb.messageId,
-                callbackId = cb.callbackId, data = cb.data,
+                callbackId = cb.callbackId, data = lstData,
                 firstName = cb.firstName, replyKeyboard = store.keyboard(botId),
             )
             return
