@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Paper-plane glyph (bot control / messaging), centered in safe zone -->
+    <group android:scaleX="0.55" android:scaleY="0.55" android:pivotX="54" android:pivotY="54">
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M84,26 L24,50 C21.5,51 21.7,54.4 24.3,55.2 L38,59.4 L44,77.5 C44.8,79.9 47.9,80.3 49.4,78.2 L56.6,68.4 L68.5,77.3 C70.7,78.9 73.8,77.7 74.4,75.1 L86.8,29.6 C87.4,27.2 85.6,25.1 84,26 Z M40,58 L72,36 L48.5,66.5 Z" />
+    </group>
+</vector>

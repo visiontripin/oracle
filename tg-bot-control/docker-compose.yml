@@ -1,0 +1,24 @@
+services:
+  bot-api:
+    build: ./server
+    container_name: tg-bot-admin-api
+    env_file: .env
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./server/plugins:/app/plugins
+      - ./server/data:/app/data
+      - ./server/backups:/app/backups
+    restart: unless-stopped
+
+  # Optional: PostgreSQL (uncomment DATABASE_URL in .env to use)
+  # db:
+  #   image: postgres:16-alpine
+  #   environment:
+  #     POSTGRES_USER: bot
+  #     POSTGRES_PASSWORD: secret
+  #     POSTGRES_DB: botdb
+  #   volumes:
+  #     - pgdata:/var/lib/postgresql/data
+  # volumes:
+  #   pgdata:
