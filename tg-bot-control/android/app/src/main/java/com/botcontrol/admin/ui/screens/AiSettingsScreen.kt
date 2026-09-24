@@ -29,7 +29,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.botcontrol.admin.data.LocalBotStore
-import com.botcontrol.admin.data.PerkurPresets
 import com.botcontrol.admin.llm.DeviceLlm
 import com.botcontrol.admin.ui.components.DropdownField
 import com.botcontrol.admin.ui.components.SectionTitle
@@ -48,7 +47,6 @@ fun AiSettingsScreen(localStore: LocalBotStore, onBack: () -> Unit) {
     var temperature by remember { mutableStateOf(0.8f) }
     var topK by remember { mutableStateOf(40) }
     var maxTokens by remember { mutableStateOf(1024) }
-    var showSmith by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         botId = localStore.activeBotId()
@@ -106,30 +104,10 @@ fun AiSettingsScreen(localStore: LocalBotStore, onBack: () -> Unit) {
         Text("Паузы «печатает…», антифлуд, память диалога и уточняющие вопросы — в разделе «Сценарии → Поведение и паузы».",
             style = MaterialTheme.typography.bodySmall)
 
-        SectionTitle("Готовый характер")
-        OutlinedButton(onClick = { showSmith = true }, modifier = Modifier.fillMaxWidth()) {
-            Text("🕶 Поставить характер «Агент Смит»")
-        }
-        Text("Меняется в поле «Характер бота» на главном экране бота.",
+        SectionTitle("Характер")
+        Text("Пишется вручную в поле ниже или импортируется кодом (SYSTEM_PROMPT в конфиге бота). "
+            + "Готовый промт для генерации конфига — в разделе «🧠 Промт для создания бота».",
             style = MaterialTheme.typography.bodySmall)
         Spacer(Modifier.height(24.dp))
-    }
-
-    if (showSmith) {
-        AlertDialog(
-            onDismissRequest = { showSmith = false },
-            title = { Text("Характер «Агент Смит»") },
-            text = { Text("Текущий системный промт будет заменён промтом Агента Смита из Матрицы (холодный, саркастичный, только русский, коротко).") },
-            confirmButton = {
-                TextButton(onClick = {
-                    scope.launch {
-                        localStore.setSystemPrompt(PerkurPresets.SMITH_PROMPT, botId)
-                        DeviceLlm.log("🕶 Установлен характер «Агент Смит»")
-                        showSmith = false
-                    }
-                }) { Text("Поставить") }
-            },
-            dismissButton = { TextButton(onClick = { showSmith = false }) { Text("Отмена") } },
-        )
     }
 }

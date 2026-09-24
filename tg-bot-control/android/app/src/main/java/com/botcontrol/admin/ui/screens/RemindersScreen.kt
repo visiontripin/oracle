@@ -33,7 +33,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.botcontrol.admin.data.InlineBtn
 import com.botcontrol.admin.data.LocalBotStore
-import com.botcontrol.admin.data.PerkurPresets
 import com.botcontrol.admin.data.ReplyPack
 import com.botcontrol.admin.data.ScheduleEvent
 import com.botcontrol.admin.llm.DeviceLlm
@@ -55,7 +54,6 @@ fun RemindersScreen(localStore: LocalBotStore, onBack: () -> Unit) {
     var remindersOn by remember { mutableStateOf(false) }
     var showAdd by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf<ScheduleEvent?>(null) }
-    var showPreset by remember { mutableStateOf(false) }
 
     fun load() {
         scope.launch {
@@ -84,10 +82,6 @@ fun RemindersScreen(localStore: LocalBotStore, onBack: () -> Unit) {
                     scope.launch { localStore.setRemindersOn(it) }
                 })
             }
-        }
-        Spacer(Modifier.height(8.dp))
-        OutlinedButton(onClick = { showPreset = true }, modifier = Modifier.fillMaxWidth()) {
-            Text("⚡ Загрузить пример: перекур-бот")
         }
 
         SectionTitle("События")
@@ -149,26 +143,6 @@ fun RemindersScreen(localStore: LocalBotStore, onBack: () -> Unit) {
                     load()
                 }
             },
-        )
-    }
-
-    if (showPreset) {
-        AlertDialog(
-            onDismissRequest = { showPreset = false },
-            title = { Text("Загрузить пример?") },
-            text = { Text("Текущее расписание будет заменено расписанием перкур-бота: ежедневные 00:00/06:00/18:55 + будни (перекуры и обед) + пятница. Напоминания включатся.") },
-            confirmButton = {
-                TextButton(onClick = {
-                    scope.launch {
-                        localStore.setSchedule(PerkurPresets.schedule())
-                        localStore.setRemindersOn(true)
-                        DeviceLlm.log("⚡ Загружено расписание перкур-бота (${PerkurPresets.schedule().size} событий)")
-                        showPreset = false
-                        load()
-                    }
-                }) { Text("Загрузить") }
-            },
-            dismissButton = { TextButton(onClick = { showPreset = false }) { Text("Отмена") } },
         )
     }
 }

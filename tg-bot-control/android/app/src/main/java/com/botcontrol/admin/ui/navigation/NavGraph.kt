@@ -45,6 +45,7 @@ import com.botcontrol.admin.ui.screens.OnDeviceScreen
 import com.botcontrol.admin.ui.screens.PluginDetailScreen
 import com.botcontrol.admin.ui.screens.PluginEditorScreen
 import com.botcontrol.admin.ui.screens.PluginsScreen
+import com.botcontrol.admin.ui.screens.PromptScreen
 import com.botcontrol.admin.ui.screens.RemindersScreen
 import com.botcontrol.admin.ui.screens.PacksScreen
 import com.botcontrol.admin.ui.screens.ScriptEditorScreen
@@ -71,6 +72,7 @@ object Routes {
     const val AI_SETTINGS = "aisettings"
     const val BOT_SETTINGS = "botsettings"
     const val IMPORT = "import"
+    const val PROMPT = "prompt"
     const val BUTTONS = "buttons"
     const val BEHAVIOR = "behavior"
     const val DEV_LOG = "devlog"
@@ -145,6 +147,7 @@ fun NavGraph(
             BotTreeScreen(
                 botId = id,
                 localStore = localStore,
+                repository = repository,
                 onOpen = { route -> nav.navigate(route) },
                 onAddBot = { nav.navigate(Routes.LOCAL_SETUP) },
                 onBack = { nav.popBackStack() },
@@ -246,7 +249,7 @@ fun NavGraph(
             )
         }
         composable(Routes.BUTTONS) {
-            ButtonsScreen(localStore, onBack = { nav.popBackStack() })
+            ButtonsScreen(localStore, repository, onBack = { nav.popBackStack() })
         }
         composable(Routes.BEHAVIOR) {
             BehaviorScreen(localStore, onBack = { nav.popBackStack() })
@@ -277,6 +280,9 @@ fun NavGraph(
         }
         composable(Routes.IMPORT) {
             ImportScreen(localStore, repository, onBack = { nav.popBackStack() })
+        }
+        composable(Routes.PROMPT) {
+            PromptScreen(onBack = { nav.popBackStack() })
         }
         composable(
             Routes.SCRIPT,

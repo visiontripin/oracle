@@ -1,21 +1,47 @@
-# Промт: генерация ботов для BotControl (v3, под импортёр v1.5.2)
+package com.botcontrol.admin.ui.screens
 
-Один и тот же текст лежит и в приложении: **дерево бота → «Скрипты» →
-«🧠 Промт для создания бота»** → «📋 Копировать». Можно не копировать из
-файла, а взять оттуда (и сразу с заполненным ЗАДАНИЕМ).
+import android.content.Intent
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.unit.dp
 
-**Как пользоваться:** скопируй блок из раздела «Промт», замени текст в
-`[квадратных скобках]` (или опиши бота в поле в приложении) и отправь
-нейросети. Полученный код проверь: «Скрипты → Импорт настроек из кода»
-→ **Разобрать** (все категории на месте?) → **Применить к боту**
-→ ▶ Запустить → /start в Telegram.
+/**
+ * Промт для создания бота: готовый текст, который нужно отправить любой
+ * нейросети (или ввести в чат с ИИ в этом же приложении), чтобы получить
+ * конфиг бота в формате импорта. Здесь же — кнопка «Копировать».
+ *
+ * Встроенных примеров ботов в приложении больше нет: примеры создаются
+ * этим промтом под конкретную задачу.
+ */
+object BotPrompt {
 
----
-
-## Промт (копируй отсюда)
-
-```text
-Ты — генератор конфигураций для приложения BotControl (Android: Telegram-боты, которые работают прямо на телефоне, ИИ — локально, без облака).
+    private const val HEAD = """Ты — генератор конфигураций для приложения BotControl (Android: Telegram-боты, которые работают прямо на телефоне, ИИ — локально, без облака).
 Выведи РОВНО ОДИН блок кода на Python и ничего больше: без пояснений, без import, без обращений к API.
 Это НЕ исполняемый скрипт, а конфиг: приложение читает текст и раскладывает его по настройкам бота (код не запускается, поэтому import, requests, asyncio, sqlite бессмысленны).
 
@@ -119,41 +145,90 @@ def on_price(msg):
 9. ЗАПРЕЩЕНО: f-строки с выражениями, вложенные списки и словари внутри списков, import,
    requests/asyncio/os/sqlite, регулярки, HTML-разметка, markdown. Только строки, числа и вызовы выше.
 
-ЗАДАНИЕ: создай бота: [опиши одним абзацем: роль и характер; что бот делает;
+ЗАДАНИЕ: создай бота:"""
+
+    private const val TASK_HINT = """[опиши одним абзацем: роль и характер; что бот делает;
 команды кроме /start и /help; наборы ответов (имя — сколько фраз);
 расписание (во сколько и в какие дни); кнопки под сообщениями и что они делают;
-особые правила: тон, длина ответа, запреты]
-```
+особые правила: тон, длина ответа, запреты]"""
 
----
+    /** Полный текст промта: с готовым заданием или с шаблоном для заполнения. */
+    fun build(task: String): String {
+        val t = task.trim()
+        return if (t.isBlank()) "$HEAD\n$TASK_HINT" else "$HEAD\n$t"
+    }
+}
 
-## Пример заполненного ЗАДАНИЯ
+@Composable
+fun PromptScreen(onBack: () -> Unit) {
+    val context = LocalContext.current
+    val clipboard = LocalClipboardManager.current
+    var task by remember { mutableStateOf("") }
+    var copied by remember { mutableStateOf(false) }
+    val prompt = BotPrompt.build(task)
 
-```text
-ЗАДАНИЕ: создай бота: роль — «Бариста-бот» кофейни «Утро», тон дружелюбный,
-отвечает коротко; команды /menu — меню и цены; наборы: CROISSANT_JOKES —
-15 шуток про круассаны, THANK_YOU_LINES — 10 фраз благодарности за заказ;
-кнопки под /start: «▶️ Запуск» (включает напоминания), «⏹ Стоп»
-(выключает), «🌐 Сайт» (url https://example.com); клавиатура чата:
-«☕ Меню» (текст с ценами), «🎁 Акции»; расписание: ежедневно в 9:00
-«☕ Мы открылись!», в будни в 15:00 «🍰 Десерт −20% после обеда» с меню
-перекура, в пятницу в 18:00 «🎉 Пятничный латте по цене эспрессо»,
-в выходные в 11:00 «🌴 Бранч до 14:00»; уточняющие вопросы: «Какой кофе?»,
-«С собой или здесь?», «Сколько сахара?»; запрет: не обсуждать темы, не
-связанные с кофе.
-```
+    Column(Modifier.fillMaxSize().padding(16.dp)) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            TextButton(onClick = onBack) { Text("← Назад") }
+            Text("Промт для бота", style = MaterialTheme.typography.titleLarge)
+        }
+        Text("Отправь этот текст любой нейросети (ChatGPT, Claude, Gemini — или местному ИИ в «Чат с ИИ»). "
+            + "Она вернёт конфиг бота. Сохрани его в .py и импортируй: раздел «Скрипты → Импорт настроек из кода» "
+            + "→ «Разобрать» → «Применить к боту».",
+            style = MaterialTheme.typography.bodySmall)
+        Spacer(Modifier.padding(6.dp))
 
-## Если категория не появилась при «Разобрать»
+        OutlinedTextField(
+            task, { task = it; copied = false },
+            label = { Text("Что за бот (необязательно)") },
+            placeholder = { Text("Бот кофейни: дружелюбный, коротко; наборы CROISSANT_JOKES 15 фраз…") },
+            textStyle = MaterialTheme.typography.bodySmall,
+            modifier = Modifier.fillMaxWidth().height(90.dp),
+        )
+        Text("Если поле заполнено — в конец промта подставится готовое ЗАДАНИЕ. "
+            + "Если оставить пустым — останется шаблон в квадратных скобках.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(Modifier.padding(6.dp))
 
-| Симптом | Причина |
-|---|---|
-| Нет «Характер ИИ» | SYSTEM_PROMPT не в склейке строк `( "…" "…" )` |
-| Нет набора | элемент не на своей строке, `]` не на отдельной строке, или имя из служебного реестра |
-| Нет событий расписания | кортежи вне `get_today_schedule` или часы вне 0–23 |
-| Команда не появилась | `def cmd_старт` (кириллица) или нет декоратора `@bot.message_handler` |
-| Кнопки без действия | нет обработчика `@bot.callback_query_handler` / ветки `call.data == "…"` |
-| «Меню объявлено, но не прикреплено» | нет `reply_markup=имя_меню()` в send_message и оно не указано 4-м элементом события |
-| Всплывашка «Уже работает» не подхватилась | поставь `answer_callback_query` ДО `return` в ветке досрочного выхода |
-| Текст обрезался | длиннее 2000 символов — сократи |
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+            Button(onClick = {
+                clipboard.setText(AnnotatedString(prompt))
+                copied = true
+            }, modifier = Modifier.weight(1f)) {
+                Text(if (copied) "✅ Скопировано" else "📋 Копировать")
+            }
+            OutlinedButton(onClick = {
+                runCatching {
+                    val send = Intent(Intent.ACTION_SEND)
+                        .setType("text/plain")
+                        .putExtra(Intent.EXTRA_SUBJECT, "Промт: конфиг бота BotControl")
+                        .putExtra(Intent.EXTRA_TEXT, prompt)
+                    context.startActivity(Intent.createChooser(send, "Отправить промт"))
+                }
+            }, modifier = Modifier.weight(1f)) { Text("📤 Поделиться") }
+        }
+        Spacer(Modifier.padding(6.dp))
 
-Грамматика проверена на импортёре v1.5.2 (`PySource` + `ScriptImporter`).
+        Card(Modifier.fillMaxWidth().weight(1f)) {
+            SelectionContainer {
+                Column(
+                    Modifier
+                        .fillMaxSize()
+                        .padding(10.dp)
+                        .verticalScroll(rememberScrollState()),
+                ) {
+                    Text(
+                        prompt,
+                        style = TextStyle(
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = MaterialTheme.typography.bodySmall.fontSize,
+                            color = MaterialTheme.colorScheme.onBackground,
+                        ),
+                    )
+                    Spacer(Modifier.padding(20.dp))
+                }
+            }
+        }
+    }
+}

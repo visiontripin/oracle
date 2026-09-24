@@ -29,7 +29,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.botcontrol.admin.data.LocalBotStore
-import com.botcontrol.admin.data.PerkurPresets
 import com.botcontrol.admin.data.ReplyPack
 import java.util.UUID
 import kotlinx.coroutines.launch
@@ -55,31 +54,11 @@ fun PacksScreen(localStore: LocalBotStore, onBack: () -> Unit, onEditPack: (Stri
             TextButton(onClick = onBack) { Text("← Назад") }
             Text("Наборы ответов", style = MaterialTheme.typography.titleLarge)
         }
-        Text("Из этих списков бот присылает случайное — по кнопкам и правилам с действием «Набор».",
+        Text("Из этих списков бот присылает случайное — по кнопкам и правилам с действием «Набор». "
+            + "Свои списки можно импортировать кодом: Скрипты → Импорт настроек из кода "
+            + "(список строк вида NAME = [ «…», ] станет набором).",
             style = MaterialTheme.typography.bodySmall)
         Spacer(Modifier.height(8.dp))
-
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-            OutlinedButton(onClick = {
-                scope.launch {
-                    val current = localStore.packs().filterNot {
-                        it.id == PerkurPresets.PACK_JOKES
-                    }
-                    localStore.setPacks(current + ReplyPack(
-                        PerkurPresets.PACK_JOKES, "😂 Шутки", PerkurPresets.JOKES))
-                    load()
-                }
-            }, modifier = Modifier.weight(1f)) { Text("😂 Шутки") }
-            OutlinedButton(onClick = {
-                scope.launch {
-                    val current = localStore.packs().filterNot {
-                        it.id == PerkurPresets.PACK_SMOKE_DONE || it.id == PerkurPresets.PACK_HEALTHY
-                    }
-                    localStore.setPacks(current + PerkurPresets.packs().drop(1))
-                    load()
-                }
-            }, modifier = Modifier.weight(1f)) { Text("🚬 Сарказм") }
-        }
 
         Spacer(Modifier.height(8.dp))
         if (packs.isEmpty()) {

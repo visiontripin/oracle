@@ -14,8 +14,21 @@ android {
         ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
         minSdk = 26
         targetSdk = 34
-        versionCode = 21
-        versionName = "1.5.1"
+        versionCode = 22
+        versionName = "1.5.2"
+    }
+
+    // Постоянный debug-ключ в репозитории: APK из CI (GitHub Actions) всегда
+    // подписан одним сертификатом → обновление ставится поверх, без удаления
+    // приложения и потери ботов. Стандартные debug-пароли «android».
+    signingConfigs {
+        getByName("debug") {
+            storeFile = file("debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+            storeType = "pkcs12"
+        }
     }
 
     buildTypes {
@@ -28,6 +41,7 @@ android {
         }
         debug {
             applicationIdSuffix = ".debug"
+            signingConfig = signingConfigs.getByName("debug")
         }
     }
 

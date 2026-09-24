@@ -1,6 +1,7 @@
 package com.botcontrol.admin.data.telegram
 
 import com.botcontrol.admin.data.InlineBtn
+import com.botcontrol.admin.data.layoutRows
 import com.google.gson.Gson
 import com.google.gson.JsonParser
 import kotlinx.coroutines.Dispatchers
@@ -206,14 +207,8 @@ class TelegramApi(private val token: String) {
                     mapOf("keyboard" to rows, "resize_keyboard" to true))
             }
             if (inlineMenu.isNotEmpty()) {
-                val buttons = inlineMenu.map { b ->
-                    if (b.url.isNotBlank())
-                        mapOf("text" to b.label, "url" to b.url)
-                    else
-                        mapOf("text" to b.label, "callback_data" to b.id)
-                }
                 payloadMap["reply_markup"] = com.google.gson.Gson().toJson(
-                    mapOf("inline_keyboard" to buttons.chunked(2)))
+                    mapOf("inline_keyboard" to inlineMenu.layoutRows().map { r -> r.map { it.toApi() } }))
             }
             val payload = com.google.gson.Gson().toJson(payloadMap).toRequestBody(json)
             fastClient.newCall(Request.Builder().url(url("sendMessage")).post(payload).build())
@@ -312,14 +307,8 @@ class TelegramApi(private val token: String) {
             val payloadMap = mutableMapOf<String, Any>(
                 "chat_id" to channel, "text" to text.take(4000))
             if (inlineMenu.isNotEmpty()) {
-                val buttons = inlineMenu.map { b ->
-                    if (b.url.isNotBlank())
-                        mapOf("text" to b.label, "url" to b.url)
-                    else
-                        mapOf("text" to b.label, "callback_data" to b.id)
-                }
                 payloadMap["reply_markup"] = com.google.gson.Gson().toJson(
-                    mapOf("inline_keyboard" to buttons.chunked(2)))
+                    mapOf("inline_keyboard" to inlineMenu.layoutRows().map { r -> r.map { it.toApi() } }))
             }
             val payload = Gson().toJson(payloadMap).toRequestBody(json)
             fastClient.newCall(Request.Builder().url(url("sendMessage")).post(payload).build())
@@ -436,11 +425,8 @@ class TelegramApi(private val token: String) {
                 "text" to text.take(4000),
             )
             if (inlineMenu.isNotEmpty()) {
-                val buttons = inlineMenu.map { b ->
-                    mapOf("text" to b.label, "callback_data" to b.id)
-                }
                 payloadMap["reply_markup"] = Gson().toJson(
-                    mapOf("inline_keyboard" to buttons.chunked(2)))
+                    mapOf("inline_keyboard" to inlineMenu.layoutRows().map { r -> r.map { it.toApi() } }))
             }
             val payload = Gson().toJson(payloadMap).toRequestBody(json)
             fastClient.newCall(Request.Builder().url(url("editMessageText")).post(payload).build())
@@ -508,5 +494,12 @@ class TelegramApi(private val token: String) {
         } catch (e: Throwable) {
             Result.failure(e)
         }
+    }
+
+    /** Кнопка в формате Bot API: ссылка или callback_data (id обязан быть непустым). */
+    private fun InlineBtn.toApi(): Map<String, String> = when {
+        url.isNotBlank() -> mapOf("text" to label, "url" to url)
+        id.isNotBlank() -> mapOf("text" to label, "callback_data" to id)
+        else -> mapOf("text" to label, "callback_data" to ("cb" + label.hashCode()))
     }
 }

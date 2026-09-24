@@ -1,13 +1,14 @@
 package com.botcontrol.admin.ui.components
 
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -80,12 +81,20 @@ fun MenuEditor(
     }
 }
 
-private fun actionLabel(btn: InlineBtn, packs: List<ReplyPack>): String = when (btn.action) {
-    "pack" -> "→ случайное из «${packs.firstOrNull { it.id == btn.packId }?.name ?: btn.packId}»"
-    "reminders_on" -> "→ включить напоминания"
-    "reminders_off" -> "→ выключить напоминания"
-    "script" -> "→ скрипт JS"
-    else -> "→ текст: ${btn.text.take(30)}"
+private fun actionLabel(btn: InlineBtn, packs: List<ReplyPack>): String {
+    val base = when (btn.action) {
+        "pack" -> "→ случайное из «${packs.firstOrNull { it.id == btn.packId }?.name ?: btn.packId}»"
+        "reminders_on" -> "→ включить напоминания"
+        "reminders_off" -> "→ выключить напоминания"
+        "script" -> "→ скрипт JS"
+        "url" -> "→ ссылка: ${btn.url.take(30)}"
+        else -> "→ текст: ${btn.text.take(30)}"
+    }
+    val flags = buildList {
+        if (btn.edit) add("правит сообщение")
+        if (btn.row > 0) add("ряд ${btn.row}")
+    }
+    return base + if (flags.isEmpty()) "" else " (${flags.joinToString(", ")})"
 }
 
 @Composable
@@ -101,6 +110,10 @@ private fun MenuButtonDialog(
     var packId by remember { mutableStateOf(initial.packId) }
     var text by remember { mutableStateOf(initial.text) }
     var script by remember { mutableStateOf(initial.script) }
+    var url by remember { mutableStateOf(initial.url) }
+    var edit by remember { mutableStateOf(initial.edit) }
+    var row by remember { mutableStateOf(if (initial.row > 0) initial.row else 1) }
+    var toastSame by remember { mutableStateOf(initial.toastNoChange) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -117,11 +130,12 @@ private fun MenuButtonDialog(
                 Spacer(Modifier.height(8.dp))
                 DropdownField(
                     value = action,
-                    options = listOf("text", "pack", "reminders_on", "reminders_off", "script"),
+                    options = listOf("text", "pack", "url", "reminders_on", "reminders_off", "script"),
                     label = "Что сделать",
                     display = {
                         when (it) {
                             "pack" -> "Случайное из набора"
+                            "url" -> "Открыть ссылку"
                             "reminders_on" -> "Включить напоминания"
                             "reminders_off" -> "Выключить напоминания"
                             "script" -> "Скрипт JS"
@@ -150,24 +164,56 @@ private fun MenuButtonDialog(
                         label = { Text("JS: function handle(e) { … return \"ответ\" }") },
                         textStyle = MaterialTheme.typography.bodySmall,
                         modifier = Modifier.fillMaxWidth().height(190.dp))
-                    "reminders_on", "reminders_off" -> OutlinedTextField(text, { text = it },
-                        label = { Text("Текст после переключения") },
-                        modifier = Modifier.fillMaxWidth().height(90.dp))
+                    "url" -> {
+                        OutlinedTextField(url, { url = it },
+                            label = { Text("Ссылка") },
+                            placeholder = { Text("https://… или tg://user?id=12345") },
+                            singleLine = true, modifier = Modifier.fillMaxWidth())
+                        Text("Кнопка-ссылка ничего не шлёт боту — Telegram просто открывает адрес.",
+                            style = MaterialTheme.typography.bodySmall)
+                    }
+                    "reminders_on", "reminders_off" -> {
+                        OutlinedTextField(text, { text = it },
+                            label = { Text("Текст после переключения") },
+                            modifier = Modifier.fillMaxWidth().height(90.dp))
+                        OutlinedTextField(toastSame, { toastSame = it },
+                            label = { Text("Всплывашка, если уже так (необязательно)") },
+                            placeholder = { Text("Уже работает") },
+                            singleLine = true, modifier = Modifier.fillMaxWidth())
+                    }
                     else -> OutlinedTextField(text, { text = it },
                         label = { Text("Ответ бота") },
                         modifier = Modifier.fillMaxWidth().height(90.dp))
                 }
+                if (action == "text" || action == "pack") {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(checked = edit, onCheckedChange = { edit = it })
+                        Text("Править это сообщение (не присылать новое)",
+                            style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+                Spacer(Modifier.height(4.dp))
+                DropdownField(
+                    value = row,
+                    options = (1..3).toList(),
+                    label = "Ряд кнопок",
+                    display = { "Ряд $it" },
+                    onSelect = { row = it },
+                )
             }
         },
         confirmButton = {
             val resolvedPack = packId.ifBlank { packs.firstOrNull()?.id.orEmpty() }
             TextButton(
                 onClick = { onSave(InlineBtn(action = action, label = label.trim(), toast = toast,
-                    packId = resolvedPack, text = text, script = script)) },
+                    packId = resolvedPack, text = text, script = script,
+                    url = if (action == "url") url.trim() else "", edit = edit, row = row,
+                    toastNoChange = if (action.startsWith("reminders")) toastSame.trim() else "")) },
                 enabled = label.isNotBlank() && when (action) {
                     "pack" -> resolvedPack.isNotBlank()
                     "text" -> text.isNotBlank()
                     "script" -> script.isNotBlank()
+                    "url" -> url.trim().startsWith("http") || url.trim().startsWith("tg://")
                     else -> true
                 },
             ) { Text("Сохранить") }

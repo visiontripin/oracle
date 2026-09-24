@@ -32,18 +32,26 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import com.botcontrol.admin.data.BotJson
 import com.botcontrol.admin.data.BotRepository
+import com.botcontrol.admin.data.InlineBtn
 import com.botcontrol.admin.data.LocalBotStore
-import com.botcontrol.admin.data.PerkurPresets
 import com.botcontrol.admin.data.ScriptImporter
+import com.botcontrol.admin.data.local.BotRuleEntity
 import com.botcontrol.admin.data.withIds
 import com.botcontrol.admin.llm.DeviceLlm
 import kotlinx.coroutines.launch
 
 /**
- * Импорт настроек готового бота из исходника (.py / .js / .txt):
- * вставь текст кода или выбери файл — параметры сами разложатся по
- * категориям настроек бота. Есть и встроенный пример (перкур-бот).
+ * Импорт настроек бота из исходника (.py / .js / .txt).
+ *
+ * Вставь код или выбери файл → «Разобрать» → приложение покажет найденное
+ * по категориям (ИИ, поведение, команды, правила, клавиатура, наборы,
+ * расписание, канал) → отметь галочками → «Применить к боту».
+ *
+ * Никаких встроенных примеров: импортируется ровно то, что есть в коде.
+ * Если что-то не удалось понять, приложение честно пишет об этом в
+ * «Замечания» — и подсказывает, что поправить руками.
  */
 @Composable
 fun ImportScreen(
@@ -59,6 +67,27 @@ fun ImportScreen(
     var message by remember { mutableStateOf("") }
     var error by remember { mutableStateOf("") }
 
+    fun reparse(text: String) {
+        if (text.isBlank()) {
+            error = "Сначала вставь текст кода или выбери файл"
+            parsed = null
+            return
+        }
+        val p = ScriptImporter.parse(text)
+        if (p.isEmpty()) {
+            error = "Знакомых параметров не нашлось. Проверь, что в коде есть SYSTEM_PROMPT, " +
+                "команды (@bot.message_handler), списки фраз, расписание или кнопки."
+            parsed = null
+            message = ""
+        } else {
+            error = ""
+            parsed = p
+            checked.clear()
+            p.sections().forEach { checked[it.key] = true }
+            message = "Найдено категорий: ${p.sections().size}"
+        }
+    }
+
     val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri != null) {
             runCatching {
@@ -67,8 +96,9 @@ fun ImportScreen(
                 }.orEmpty()
             }.onSuccess { text ->
                 source = text
-                parsed = ScriptImporter.parse(text)
-                message = "Файл прочитан: ${text.length} символов"
+                reparse(text)
+                if (parsed != null) message = "Файл прочитан: ${text.length} символов — " +
+                    "найдено категорий: ${parsed?.sections()?.size ?: 0}"
             }.onFailure { error = "Не удалось прочитать файл: ${it.message}" }
         }
     }
@@ -78,7 +108,9 @@ fun ImportScreen(
             TextButton(onClick = onBack) { Text("← Назад") }
             Text("Импорт настроек", style = MaterialTheme.typography.titleLarge)
         }
-        Text("Вставь код готового бота (Python: telebot/aiogram, JavaScript) или текст с параметрами — приложение найдёт характер ИИ, команды, расписание, наборы ответов, кнопки и разложит по настройкам.",
+        Text("Вставь код бота (Python: telebot/aiogram, JavaScript) или код, сгенерированный " +
+            "по промту из раздела «🧠 Промт для создания бота». Приложение разберёт характер ИИ, " +
+            "команды и правила, кнопки под сообщениями, клавиатуру чата, наборы ответов и расписание.",
             style = MaterialTheme.typography.bodySmall)
         Spacer(Modifier.height(8.dp))
 
@@ -89,17 +121,9 @@ fun ImportScreen(
             modifier = Modifier.fillMaxWidth().height(150.dp),
         )
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-            Button(onClick = {
-                if (source.isBlank()) { error = "Сначала вставь текст кода"; return@Button }
-                val p = ScriptImporter.parse(source)
-                if (p.isEmpty()) {
-                    error = "Знакомых параметров не нашлось. Проверь, что в коде есть SYSTEM_PROMPT, команды, списки фраз или расписание."
-                    parsed = null
-                } else {
-                    error = ""
-                    parsed = p
-                }
-            }, modifier = Modifier.weight(1f)) { Text("🔍 Разобрать") }
+            Button(onClick = { reparse(source) }, modifier = Modifier.weight(1f)) {
+                Text("🔍 Разобрать")
+            }
             OutlinedButton(onClick = { filePicker.launch("*/*") }, modifier = Modifier.weight(1f)) {
                 Text("📂 Выбрать файл")
             }
@@ -110,162 +134,225 @@ fun ImportScreen(
             style = MaterialTheme.typography.bodySmall)
         Spacer(Modifier.height(8.dp))
 
-        // ---------- найденное по категориям ----------
-        var modelHint by remember { mutableStateOf("") }
-        LaunchedEffect(parsed) {
-            val p = parsed ?: return@LaunchedEffect
-            if (p.systemPrompt != null && localStore.aiModel(localStore.activeBotId()).isBlank()) {
-                modelHint = "⚠️ В коде бот отвечал через ИИ (LLM). Чтобы это работало как в оригинале, открой «ИИ → Модели ИИ» и скачай/выбери модель."
-            } else modelHint = ""
-        }
-        if (modelHint.isNotBlank()) {
-            Text(modelHint, color = MaterialTheme.colorScheme.tertiary,
-                style = MaterialTheme.typography.bodySmall)
-        }
         parsed?.let { p ->
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(12.dp)) {
-                    Text("Найдено — отметь, что применить:", style = MaterialTheme.typography.titleSmall)
-                    val items = p.summary()
-                    items.forEach { line ->
-                        val key = line
-                        Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Найдено — отметь, что применить:",
+                        style = MaterialTheme.typography.titleSmall)
+                    p.sections().forEach { section ->
+                        Row(verticalAlignment = Alignment.Top) {
                             Checkbox(
-                                checked = checked[key] ?: true,
-                                onCheckedChange = { checked[key] = it },
+                                checked = checked[section.key] ?: true,
+                                onCheckedChange = { checked[section.key] = it },
                             )
-                            Text(line, style = MaterialTheme.typography.bodySmall,
-                                modifier = Modifier.weight(1f))
+                            Column(Modifier.weight(1f)) {
+                                Text(section.title, style = MaterialTheme.typography.bodyMedium)
+                                section.details.forEach { line ->
+                                    Text("• $line", style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                            }
                         }
+                        Spacer(Modifier.height(2.dp))
                     }
                     Spacer(Modifier.height(4.dp))
                     Button(onClick = {
                         scope.launch {
-                            var botId = localStore.activeBotId()
-                            if (botId <= 0L) botId =
-                                localStore.profiles().firstOrNull()?.id ?: 1L
-                            // Список категорий может не содержать строку (нет такой
-                            // секции в коде) — отсутствие = применять.
-                            fun wanted(prefix: String): Boolean =
-                                items.firstOrNull { it.startsWith(prefix) }
-                                    ?.let { checked[it] } ?: true
-
-                            if (p.systemPrompt != null && wanted("Характер"))
-                                localStore.setSystemPrompt(p.systemPrompt, botId)
-                            p.temperature?.let { if (wanted("Температура"))
-                                localStore.setAiTemperature(it, botId) }
-                            p.maxTokens?.let { if (wanted("Максимум токенов"))
-                                localStore.setAiMaxTokens(it, botId) }
-                            p.topK?.let { if (wanted("Top-K"))
-                                localStore.setAiTopK(it, botId) }
-                            p.historyLimit?.let { if (wanted("Память"))
-                                localStore.setHistoryLimit(it, botId) }
-                            p.cooldownSec?.let { if (wanted("Пауза"))
-                                localStore.setCooldownSec(it, botId) }
-                            p.typingSec?.let { if (wanted("«Печатает"))
-                                localStore.setTypingSeconds(it, botId) }
-                            if (p.clarify.isNotEmpty() && wanted("Уточняющих"))
-                                localStore.setClarifyQuestions(p.clarify, botId)
-                            if (p.commands.isNotEmpty() && wanted("Команды")) {
-                                val existing = localStore.menuCommands(botId)
-                                    .filterNot { mc -> p.commands.any { it == mc.command } }
-                                localStore.setMenuCommands(
-                                    existing + p.commands.map {
-                                        com.botcontrol.admin.data.MenuCommand(it, "Команда из импорта")
-                                    }, botId)
-                            }
-                            if (p.greeting != null && wanted("Приветствие")) {
-                                val rules = repository.botRules(botId)
-                                val startRule = rules.firstOrNull {
-                                    it.type == "command" && it.pattern.removePrefix("/").equals("start", true)
-                                }
-                                // В оригинале /start присылает сообщение с кнопками «Запуск/Стоп».
-                                val startMenuJson = if (p.startMenu)
-                                    com.botcontrol.admin.data.BotJson.save(
-                                        PerkurPresets.startMenu().withIds())
-                                else startRule?.menu.orEmpty()
-                                val normalizedGreeting = p.greeting
-                                    .replace("{name}", "{user}")
-                                    .replace("{username}", "{user}")
-                                if (startRule != null) {
-                                    repository.saveBotRule(startRule.copy(
-                                        responseText = normalizedGreeting, menu = startMenuJson))
-                                } else {
-                                    repository.saveBotRule(
-                                        com.botcontrol.admin.data.local.BotRuleEntity(
-                                            type = "command", pattern = "/start",
-                                            responseText = normalizedGreeting,
-                                            menu = startMenuJson,
-                                            botId = botId,
-                                        ))
-                                }
-                            }
-                            // Тексты остальных команд кода (/help и свои) → правила-команды.
-                            if (wanted("Команды")) {
-                                ScriptImporter.extractCommandTexts(source).forEach { (cmd, cmdText) ->
-                                    val rules0 = repository.botRules(botId)
-                                    val rule = rules0.firstOrNull {
-                                        it.type == "command" &&
-                                            it.pattern.removePrefix("/").equals(cmd, true)
-                                    }
-                                    if (rule != null) {
-                                        repository.saveBotRule(rule.copy(responseText = cmdText))
-                                    } else {
-                                        repository.saveBotRule(
-                                            com.botcontrol.admin.data.local.BotRuleEntity(
-                                                type = "command", pattern = "/$cmd",
-                                                responseText = cmdText, botId = botId,
-                                            ))
-                                    }
-                                }
-                            }
-                            if (p.packs.isNotEmpty() && wanted("Набор")) {
-                                // Мерж по имени: наборы с тем же названием (включая
-                                // пресетные «😂 Шутки» и сарказм) обновляют содержимое,
-                                // сохраняя свой id — кнопки меню продолжают работать.
-                                val current = localStore.packs()
-                                val merged = p.packs.map { imported ->
-                                    val existing = current.firstOrNull { it.name == imported.name }
-                                    if (existing != null) {
-                                        existing.copy(items = imported.items)
-                                    } else imported
-                                }
-                                val keep = current.filterNot { pack ->
-                                    merged.any { it.id == pack.id }
-                                }
-                                localStore.setPacks(keep + merged)
-                            }
-                            if (p.schedule.isNotEmpty() && wanted("Событий")) {
-                                val keep = localStore.schedule(botId)
-                                    .filterNot { e -> p.schedule.any { it.hour == e.hour && it.minute == e.minute } }
-                                localStore.setSchedule(keep + p.schedule, botId)
-                                // В оригинале расписание включено сразу после запуска —
-                                // иначе «напоминания не приходят».
-                                localStore.setRemindersOn(true, botId)
-                            }
-                            // Inline-кнопки кода («Запуск/Стоп», «Покурил»…) — это меню
-                            // под сообщениями, они уже применены к /start и событиям.
-                            // Клавиатуру чата из кода не трогаем: в python-боте её не было.
-                            DeviceLlm.log("📥 Импорт применён: ${p.summary().size} категорий")
-                            message = "✅ Применено к боту. Проверь соответствующие вкладки."
+                            val botId = resolveBotId(localStore)
+                            val result = applyParsed(
+                                localStore = localStore,
+                                repository = repository,
+                                botId = botId,
+                                parsed = p,
+                                wanted = { key -> checked[key] ?: true },
+                            )
+                            DeviceLlm.log("📥 Импорт применён: ${result.take(200)}")
+                            message = "✅ $result"
                             parsed = null
                             source = ""
                         }
                     }, modifier = Modifier.fillMaxWidth()) { Text("✅ Применить к боту") }
                 }
             }
+
+            if (p.warnings.isNotEmpty()) {
+                Spacer(Modifier.height(10.dp))
+                Card(Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(12.dp)) {
+                        Text("Замечания (что поправить после импорта)",
+                            style = MaterialTheme.typography.titleSmall,
+                            color = MaterialTheme.colorScheme.tertiary)
+                        p.warnings.forEach { w ->
+                            Text("⚠️ $w", style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Spacer(Modifier.height(2.dp))
+                        }
+                    }
+                }
+            }
         }
 
         Spacer(Modifier.height(12.dp))
-        OutlinedButton(onClick = {
-            scope.launch {
-                applyPerkurPreset(
-                    context, repository, localStore)
-                message = "✅ Применён встроенный пример: перкур-бот"
-            }
-        }, modifier = Modifier.fillMaxWidth()) {
-            Text("⚡ Встроенный пример: перкур-бот (Агент Смит)")
+        OutlinedButton(onClick = { source = ""; parsed = null; message = ""; error = "" },
+            modifier = Modifier.fillMaxWidth()) {
+            Text("🧹 Очистить")
         }
         Spacer(Modifier.height(24.dp))
     }
+}
+
+// ======================================================================
+// Применение разобранного конфига
+// ======================================================================
+
+private suspend fun resolveBotId(store: LocalBotStore): Long {
+    val active = store.activeBotId()
+    if (active > 0L) return active
+    return store.profiles().firstOrNull()?.id ?: 1L
+}
+
+/** Применяет отмеченные категории; возвращает сводку для пользователя. */
+private suspend fun applyParsed(
+    localStore: LocalBotStore,
+    repository: BotRepository,
+    botId: Long,
+    parsed: ScriptImporter.Parsed,
+    wanted: (String) -> Boolean,
+): String {
+    val done = ArrayList<String>()
+
+    // ---------- наборы ответов (сначала: нужны их id для кнопок) ----------
+    val packIdMap = HashMap<String, String>() // imp_XXX -> реальный id набора
+    if (parsed.packs.isNotEmpty() && wanted(ScriptImporter.SEC_PACKS)) {
+        val current = localStore.packs().toMutableList()
+        for (imported in parsed.packs) {
+            val existing = current.firstOrNull { it.name == imported.name }
+            if (existing != null) {
+                current[current.indexOf(existing)] = existing.copy(items = imported.items)
+                packIdMap[imported.id] = existing.id
+            } else {
+                val fresh = imported.copy(id = newPackId(imported.id))
+                current.add(fresh)
+                packIdMap[imported.id] = fresh.id
+            }
+        }
+        localStore.setPacks(current)
+        done.add("наборов: ${parsed.packs.size}")
+    }
+
+    fun packId(raw: String): String = packIdMap[raw] ?: raw.removePrefix("imp_")
+    fun buttonsFixed(list: List<InlineBtn>): List<InlineBtn> = list.map { b ->
+        if (b.packId.startsWith("imp_")) b.copy(packId = packId(b.packId)) else b
+    }
+
+    // ---------- характер и параметры ИИ ----------
+    if (wanted(ScriptImporter.SEC_AI)) {
+        parsed.systemPrompt?.let { localStore.setSystemPrompt(it, botId); done.add("характер ИИ") }
+        parsed.temperature?.let { localStore.setAiTemperature(it, botId) }
+        parsed.maxTokens?.let { localStore.setAiMaxTokens(it, botId) }
+        parsed.topK?.let { localStore.setAiTopK(it, botId) }
+    }
+    if (wanted(ScriptImporter.SEC_BEHAVIOR)) {
+        parsed.historyLimit?.let { localStore.setHistoryLimit(it, botId) }
+        parsed.cooldownSec?.let { localStore.setCooldownSec(it, botId); done.add("пауза $it с") }
+        parsed.typingSec?.let { localStore.setTypingSeconds(it, botId) }
+        if (parsed.clarify.isNotEmpty()) {
+            localStore.setClarifyQuestions(parsed.clarify, botId)
+            localStore.setClarifyEnabled(true, botId)
+            done.add("вопросов: ${parsed.clarify.size}")
+        }
+    }
+
+    // ---------- правила: команды, кнопки клавиатуры, фразы ----------
+    val rulesToApply = ArrayList<ScriptImporter.ImportedRule>()
+    if (wanted(ScriptImporter.SEC_COMMANDS)) rulesToApply += parsed.commands
+    if (wanted(ScriptImporter.SEC_RULES)) rulesToApply += parsed.textRules
+    var rulesSaved = 0
+    for (imp in rulesToApply) {
+        val menu = buttonsFixed(imp.menu)
+        val action = when (imp.actionType) {
+            "pack" -> "pack"
+            "llm" -> "llm"
+            "script" -> "script"
+            else -> "text"
+        }
+        val packForRule = if (action == "pack") packId(imp.packId) else ""
+        if (action == "text" && imp.text.isBlank()) continue // пустой текст — нечего сохранять
+        val existing = repository.botRules(botId).firstOrNull {
+            it.type == imp.type && it.pattern.equals(imp.pattern, ignoreCase = true)
+        }
+        val entity = if (existing != null) {
+            existing.copy(
+                actionType = action,
+                responseText = if (action == "text") imp.text else "",
+                packId = packForRule,
+                script = imp.script,
+                menu = BotJson.save(menu.withIds()),
+            )
+        } else {
+            BotRuleEntity(
+                botId = botId,
+                type = imp.type,
+                pattern = imp.pattern,
+                actionType = action,
+                responseText = if (action == "text") imp.text else "",
+                packId = packForRule,
+                script = imp.script,
+                menu = BotJson.save(menu.withIds()),
+            )
+        }
+        repository.saveBotRule(entity)
+        rulesSaved++
+    }
+    if (rulesSaved > 0) done.add("правил: $rulesSaved")
+
+    // ---------- меню Telegram (кнопка «Меню») ----------
+    if (parsed.menuCommands.isNotEmpty() && wanted(ScriptImporter.SEC_COMMANDS)) {
+        localStore.setMenuCommands(parsed.menuCommands, botId)
+        done.add("команд в меню: ${parsed.menuCommands.size}")
+    }
+
+    // ---------- клавиатура чата ----------
+    if (parsed.keyboardRows.isNotEmpty() && wanted(ScriptImporter.SEC_KEYBOARD)) {
+        val flat = parsed.keyboardRows.flatten().map { it.trim() }.filter { it.isNotBlank() }
+        if (flat.isNotEmpty()) {
+            localStore.setKeyboard(flat, botId)
+            done.add("кнопок клавиатуры: ${flat.size}")
+        }
+    }
+
+    // ---------- расписание ----------
+    if (parsed.schedule.isNotEmpty() && wanted(ScriptImporter.SEC_SCHEDULE)) {
+        val current = localStore.schedule(botId).toMutableList()
+        var added = 0
+        var replaced = 0
+        for (ev in parsed.schedule) {
+            val same = current.indexOfFirst {
+                it.hour == ev.hour && it.minute == ev.minute && it.days == ev.days
+            }
+            val fixed = ev.copy(menu = buttonsFixed(ev.menu), id = if (same >= 0) current[same].id else ev.id)
+            if (same >= 0) { current[same] = fixed; replaced++ } else { current.add(fixed); added++ }
+        }
+        localStore.setSchedule(current, botId)
+        // В оригинале напоминания включаются сразу после запуска — иначе
+        // «напоминания не приходят».
+        localStore.setRemindersOn(true, botId)
+        done.add("событий: +$added (обновлено $replaced)")
+    }
+
+    // ---------- канал и объявления ----------
+    if (wanted(ScriptImporter.SEC_CHANNEL)) {
+        parsed.channel?.let { localStore.setChannelId(it, botId); done.add("канал $it") }
+        parsed.listingsOn?.let { localStore.setListingsOn(it, botId) }
+    }
+
+    return if (done.isEmpty()) "Нечего применять — отметь хотя бы одну категорию"
+    else done.joinToString(", ")
+}
+
+private fun newPackId(imported: String): String {
+    val base = imported.removePrefix("imp_").lowercase()
+    val clean = base.replace(Regex("[^a-z0-9_]+"), "_").trim('_')
+    return if (clean.isBlank()) "pack" + System.currentTimeMillis().toString().takeLast(6)
+    else "pack_$clean".take(40)
 }

@@ -80,7 +80,6 @@ fun LocalBotScreen(
     var showAddButton by remember { mutableStateOf(false) }
     var editingButton by remember { mutableStateOf<String?>(null) }
     var packs by remember { mutableStateOf<List<com.botcontrol.admin.data.ReplyPack>>(emptyList()) }
-    var showPerkur by remember { mutableStateOf(false) }
 
     fun load() {
         scope.launch {
@@ -266,10 +265,6 @@ fun LocalBotScreen(
             }
         }
         Spacer(Modifier.height(4.dp))
-        Button(onClick = { showPerkur = true }, modifier = Modifier.fillMaxWidth()) {
-            Text("⚡ Импорт: настроить как рабочий перкур-бот")
-        }
-        Spacer(Modifier.height(4.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
             OutlinedButton(onClick = onSimulate, modifier = Modifier.weight(1f)) {
                 Text("🧪 Имитация")
@@ -278,6 +273,12 @@ fun LocalBotScreen(
                 Text("⚙️ Настройки бота")
             }
         }
+        Spacer(Modifier.height(6.dp))
+        Text("Подсказка: бота целиком (характер, команды, кнопки, наборы, расписание) можно "
+            + "собрать кодом — «Скрипты → Импорт настроек из кода». Готовый промт, по которому "
+            + "нейросеть напишет такой код, — в разделе «🧠 Промт для создания бота».",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant)
 
         // ---- default reply ----
         SectionTitle("Ответ, если ничего не подошло")
@@ -413,27 +414,6 @@ fun LocalBotScreen(
         )
     }
 
-    // ---- «как у перкур-бота»: импорт всех настроек ----
-    if (showPerkur) {
-        AlertDialog(
-            onDismissRequest = { showPerkur = false },
-            title = { Text("Настроить как перкур-бот?") },
-            text = {
-                Text("Одно нажатие переносит настройки рабочего бота: характер «Агент Смит», " +
-                    "расписание перекуров, наборы ответов (шутки, сарказм), уточняющие вопросы, " +
-                    "параметры ИИ (температура 0.7, ответ до 80 токенов, память 4 реплики, «печатает» 4 с, пауза 10 с), " +
-                    "команды /start и /help с кнопками. Твои прежние правила сохранятся, " +
-                    "характер и расписание будут заменены.")
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    scope.launch { applyPerkurPreset(context, repository, localStore); showPerkur = false; load() }
-                }) { Text("Настроить") }
-            },
-            dismissButton = { TextButton(onClick = { showPerkur = false }) { Text("Отмена") } },
-        )
-    }
-
     // ---- add/edit keyboard button dialog ----
     if (showAddButton || editingButton != null) {
         var label by remember { mutableStateOf(editingButton ?: "") }
@@ -477,72 +457,3 @@ fun LocalBotScreen(
 
 private suspend fun delay800() = kotlinx.coroutines.delay(800)
 private suspend fun delay300() = kotlinx.coroutines.delay(300)
-
-/**
- * «Импорт: как рабочий перкур-бот» — переносит все настройки оригинала:
- * характер, расписание, наборы, уточняющие вопросы, параметры ИИ,
- * команды /start и /help. Правила пользователя не удаляются.
- */
-suspend fun applyPerkurPreset(
-    context: android.content.Context,
-    repository: com.botcontrol.admin.data.BotRepository,
-    localStore: com.botcontrol.admin.data.LocalBotStore,
-) {
-    val P = com.botcontrol.admin.data.PerkurPresets
-
-    // 1) параметры ИИ (DevicePrefs — plain SharedPreferences)
-    val prefs = com.botcontrol.admin.llm.DevicePrefs(context)
-    prefs.temperature = 0.7f
-    prefs.topK = 40
-    prefs.maxTokens = 80
-
-    // 2) разговорный режим
-    localStore.setSystemPrompt(P.SMITH_PROMPT)
-    localStore.setHistoryLimit(4)
-    localStore.setTypingSeconds(4)
-    localStore.setCooldownSec(10)
-    localStore.setClarifyEnabled(true)
-    localStore.setClarifyQuestions(P.CLARIFY)
-
-    // 3) наборы ответов + расписание + включенные напоминания
-    val keepPacks = localStore.packs().filterNot {
-        it.id == P.PACK_JOKES || it.id == P.PACK_SMOKE_DONE || it.id == P.PACK_HEALTHY
-    }
-    localStore.setPacks(keepPacks + P.packs())
-    localStore.setSchedule(P.schedule())
-    localStore.setRemindersOn(true)
-
-    // 4) команды /start и /help (если ещё нет)
-    val botId = localStore.activeBotId()
-    val rules = repository.botRules(botId)
-    if (rules.none { it.type == "command" && it.pattern.replace("/", "").equals("start", true) }) {
-        repository.saveBotRule(
-            com.botcontrol.admin.data.local.BotRuleEntity(
-                botId = botId,
-                type = "command", pattern = "/start",
-                responseText = "Симуляция активирована, {user}. 👋\nНажми «Запуск», чтобы включить напоминания.",
-                actionType = "text",
-                menu = com.botcontrol.admin.data.BotJson.save(P.startMenu()),
-            )
-        )
-    }
-    if (rules.none { it.type == "command" && it.pattern.replace("/", "").equals("help", true) }) {
-        repository.saveBotRule(
-            com.botcontrol.admin.data.local.BotRuleEntity(
-                botId = botId,
-                type = "command", pattern = "/help",
-                responseText = "Кнопки:\n" +
-                    "▶️ Запуск — включить напоминания\n" +
-                    "⏹ Стоп — выключить напоминания\n\n" +
-                    "Во время перекуров:\n" +
-                    "🚬 Покурил / 💪 Остался здоровым / 😂 Рандомную шутку\n\n" +
-                    "Пиши боту что угодно — отвечает Агент Смит.\n" +
-                    "Если матрица отключена — уточняющие вопросы.",
-                actionType = "text",
-            )
-        )
-    }
-    com.botcontrol.admin.llm.DeviceLlm.log(
-        "⚡ Импортированы настройки перкур-бота: характер, расписание (${P.schedule().size}), " +
-        "наборы (${P.JOKES.size}+${P.SMOKE_DONE.size}+${P.SMOKE_HEALTHY.size}), вопросы (${P.CLARIFY.size}), команды /start и /help")
-}

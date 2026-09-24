@@ -356,19 +356,9 @@ class LocalBotService : Service() {
             return
         }
 
-        // Ищем кнопку в меню правил и в меню расписания.
-        var found: InlineBtn? = null
-        for (rule in app.repository.botRules()) {
-            BotBrain.parseMenu(rule.menu).firstOrNull { it.id == cb.data }?.let { found = it }
-            if (found != null) break
-        }
-        if (found == null) {
-            for (event in store.schedule()) {
-                event.menu.withIds().firstOrNull { it.id == cb.data }?.let { found = it }
-                if (found != null) break
-            }
-        }
-        val btn = found
+        // Ищем кнопку ТОЛЬКО среди меню этого бота (правила + события).
+        val hit = findButton(app, store, botId, cb.data)
+        val btn = hit?.first
         // Всегда отвечаем на callback, чтобы в Telegram не висели «часики».
         if (btn == null) {
             DeviceLlm.log("⚠️ Кнопка '${cb.data}' не найдена в меню правил/расписания")
@@ -378,10 +368,15 @@ class LocalBotService : Service() {
         DeviceLlm.log("🔘 Кнопка «${btn.label}» (${btn.action})")
         api.answerCallbackQuery(cb.callbackId, btn.toast)
 
+        val menu = hit?.second ?: listOf(btn)
         when (btn.action) {
             "pack" -> {
+                val reply = BotBrain.randomFrom(store.packs(), btn.packId)
                 withTyping(api, store, botId, cb.chatId)
-                api.sendMessage(cb.chatId, BotBrain.randomFrom(store.packs(), btn.packId))
+                // В оригинале сарказм присылался НОВЫМ сообщением,
+                // но если в коде стоит правка — правим сообщение под кнопкой.
+                if (btn.edit) api.editMessageText(cb.chatId, cb.messageId, reply, menu)
+                else api.sendMessage(cb.chatId, reply)
             }
             "script" -> {
                 BotScript.run(btn.script, cb.firstName, btn.label, cb.chatId)
@@ -395,26 +390,57 @@ class LocalBotService : Service() {
             }
             "reminders_on", "reminders_off" -> {
                 val on = btn.action == "reminders_on"
+                if (store.remindersOn(botId) == on) {
+                    // Уже в этом состоянии — как в оригинале: только всплывашка.
+                    api.answerCallbackQuery(
+                        cb.callbackId,
+                        btn.toastNoChange.ifBlank { "Уже ${if (on) "работает" else "остановлено"}" })
+                    return
+                }
                 store.setRemindersOn(on, botId)
                 setState(botId) { it.copy(remindersOn = on) }
                 DeviceLlm.log(
                     if (on) "▶️ Напоминания включены (кнопкой в Telegram)"
                     else "⏹ Напоминания выключены (кнопкой в Telegram)")
-                // Правим сообщение под кнопкой, как в оригинальном боте;
-                // кнопки остаются, нажатие «Стоп»/«Запуск» работает дальше.
+                // Правим сообщение под кнопкой, как в оригинальном боте:
+                // ВСЕ кнопки меню остаются — «Стоп»/«Запуск» работают дальше.
                 api.editMessageText(
                     cb.chatId, cb.messageId,
                     btn.text.ifBlank {
                         if (on) "▶️ Напоминания включены." else "⏹ Напоминания выключены."
                     },
-                    inlineMenu = listOf(btn),
+                    inlineMenu = menu,
                 )
             }
             else -> {
+                val reply = btn.text.ifBlank { "…" }
                 withTyping(api, store, botId, cb.chatId)
-                api.sendMessage(cb.chatId, btn.text.ifBlank { "…" })
+                if (btn.edit) api.editMessageText(cb.chatId, cb.messageId, reply, menu)
+                else api.sendMessage(cb.chatId, reply)
             }
         }
+    }
+
+    /**
+     * Кнопка по её callback_data: (сама кнопка, всё меню сообщения).
+     * Ищем только среди меню ЭТОГО бота — иначе кнопка одного бота
+     * срабатывала бы у другого и чужие кнопки «не работали».
+     */
+    private suspend fun findButton(
+        app: BotControlApp,
+        store: LocalBotStore,
+        botId: Long,
+        data: String,
+    ): Pair<InlineBtn, List<InlineBtn>>? {
+        for (rule in app.repository.botRules(botId)) {
+            val menu = BotBrain.parseMenu(rule.menu)
+            menu.firstOrNull { it.id == data }?.let { return it to menu }
+        }
+        for (event in store.schedule(botId)) {
+            val menu = event.menu.withIds()
+            menu.firstOrNull { it.id == data }?.let { return it to menu }
+        }
+        return null
     }
 
     // ---------- планировщик напоминаний ----------

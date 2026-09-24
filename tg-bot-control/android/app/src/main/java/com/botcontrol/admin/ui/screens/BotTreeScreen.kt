@@ -33,6 +33,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.botcontrol.admin.data.BotProfile
+import com.botcontrol.admin.data.BotRepository
 import com.botcontrol.admin.data.LocalBotStore
 import com.botcontrol.admin.service.LocalBotService
 import kotlinx.coroutines.launch
@@ -46,6 +47,7 @@ import kotlinx.coroutines.launch
 fun BotTreeScreen(
     botId: Long,
     localStore: LocalBotStore,
+    repository: BotRepository,
     onOpen: (String) -> Unit, // маршрут
     onAddBot: () -> Unit,
     onBack: () -> Unit,
@@ -56,6 +58,8 @@ fun BotTreeScreen(
     var profile by remember { mutableStateOf<BotProfile?>(null) }
     var expanded by remember { mutableStateOf(setOf("root")) }
     var confirmDelete by remember { mutableStateOf(false) }
+    var confirmReset by remember { mutableStateOf(false) }
+    var info by remember { mutableStateOf("") }
 
     LaunchedEffect(botId) {
         localStore.setActiveBot(botId)
@@ -198,6 +202,9 @@ fun BotTreeScreen(
                 TreeLeaf("Файлы бота и сервер", "media/scripts/docs + сервер по Wi-Fi") {
                     onOpen("files")
                 },
+                TreeLeaf("🧠 Промт для создания бота", "готовый промт для нейросети + «Копировать»") {
+                    onOpen("prompt")
+                },
             ))
 
         TreeBranch("🤖", "ИИ", "модель на телефоне, характер, чат",
@@ -250,7 +257,49 @@ fun BotTreeScreen(
                 },
             ))
 
+        Spacer(Modifier.height(10.dp))
+        if (info.isNotBlank()) {
+            Text(info, color = MaterialTheme.colorScheme.primary,
+                style = MaterialTheme.typography.bodySmall)
+        }
+        OutlinedButton(onClick = { confirmReset = true }, modifier = Modifier.fillMaxWidth()) {
+            Text("⚠️ Сбросить настройки бота")
+        }
+        Text("Удаляет ВСЁ, что настроено у этого бота: правила и сценарии, расписание, "
+            + "клавиатуру, характер и параметры ИИ, уточняющие вопросы, меню команд, канал "
+            + "и объявления. Имя бота и токен остаются.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant)
+
         Spacer(Modifier.height(24.dp))
+    }
+
+    if (confirmReset) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { confirmReset = false },
+            title = { Text("Сбросить настройки бота?") },
+            text = {
+                Text("Будут удалены: правила и сценарии, расписание напоминаний, клавиатура, "
+                    + "характер и параметры ИИ, уточняющие вопросы, меню команд, канал и объявления. "
+                    + "Действие необратимо. Имя бота и токен останутся.")
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmReset = false
+                    scope.launch {
+                        LocalBotService.stopBot(context, botId)
+                        repository.deleteBotRules(botId)
+                        localStore.resetBot(botId)
+                        info = "✅ Настройки бота сброшены до заводских"
+                        com.botcontrol.admin.llm.DeviceLlm.log(
+                            "♻️ Сброшены настройки бота $botId (правила, расписание, ИИ, меню)")
+                    }
+                }) { Text("Сбросить", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmReset = false }) { Text("Отмена") }
+            },
+        )
     }
 
     if (confirmDelete) {

@@ -28,10 +28,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import com.botcontrol.admin.data.BotJson
 import com.botcontrol.admin.data.LocalBotStore
 import com.botcontrol.admin.data.MenuCommand
-import com.botcontrol.admin.data.PerkurPresets
 import com.botcontrol.admin.data.local.BotRuleEntity
 import com.botcontrol.admin.data.telegram.TelegramApi
 import com.botcontrol.admin.llm.DeviceLlm
@@ -54,7 +52,6 @@ fun BotSettingsScreen(localStore: LocalBotStore, repository: com.botcontrol.admi
     var error by remember { mutableStateOf("") }
     var channel by remember { mutableStateOf("") }
     var listingsOn by remember { mutableStateOf(false) }
-    var confirmReset by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         channel = localStore.channelId(localStore.activeBotId())
@@ -137,7 +134,7 @@ fun BotSettingsScreen(localStore: LocalBotStore, repository: com.botcontrol.admi
                                 botId = localStore.activeBotId(),
                                 type = "command", pattern = "/start",
                                 responseText = greeting,
-                                menu = BotJson.save(PerkurPresets.startMenu()),
+                                menu = "",
                             ))
                     }
                     message = "Приветствие сохранено (правило /start)"
@@ -218,37 +215,6 @@ fun BotSettingsScreen(localStore: LocalBotStore, repository: com.botcontrol.admi
         Spacer(Modifier.height(24.dp))
         Spacer(Modifier.height(18.dp))
 
-        // ---------- сброс настроек бота ----------
-        SectionTitle("Сброс настроек бота")
-        Text("Удаляет ВСЁ, что настроено у этого бота: правила ответов, расписание, клавиатуру, характер и параметры ИИ, уточняющие вопросы, меню команд, напоминания, канал и объявления. Имя и токен бота остаются.",
-            style = MaterialTheme.typography.bodySmall)
-        Spacer(Modifier.height(6.dp))
-        OutlinedButton(onClick = { confirmReset = true }, modifier = Modifier.fillMaxWidth()) {
-            Text("⚠️ Сбросить настройки бота до заводских")
-        }
         Spacer(Modifier.height(24.dp))
-    }
-
-    if (confirmReset) {
-        AlertDialog(
-            onDismissRequest = { confirmReset = false },
-            title = { Text("Сбросить настройки бота?") },
-            text = { Text("Будут удалены: правила ответов, расписание напоминаний, клавиатура, характер и параметры ИИ, уточняющие вопросы, меню команд, канал и объявления. Действие необратимо. Имя бота и токен останутся.") },
-            confirmButton = {
-                TextButton(onClick = {
-                    confirmReset = false
-                    scope.launch {
-                        val botId = localStore.activeBotId()
-                        repository.deleteBotRules(botId)
-                        localStore.resetBot(botId)
-                        message = "✅ Настройки бота сброшены до заводских. Перезайди в экран."
-                        error = ""
-                    }
-                }) { Text("Сбросить", color = MaterialTheme.colorScheme.error) }
-            },
-            dismissButton = {
-                TextButton(onClick = { confirmReset = false }) { Text("Отмена") }
-            },
-        )
     }
 }

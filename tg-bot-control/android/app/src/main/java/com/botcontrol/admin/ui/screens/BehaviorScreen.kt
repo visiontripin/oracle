@@ -27,7 +27,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.botcontrol.admin.data.LocalBotStore
-import com.botcontrol.admin.data.PerkurPresets
 import com.botcontrol.admin.ui.components.DropdownField
 import com.botcontrol.admin.ui.components.SectionTitle
 import kotlinx.coroutines.launch
@@ -128,12 +127,6 @@ fun BehaviorScreen(localStore: LocalBotStore, onBack: () -> Unit) {
             label = { Text("Запасной ответ, если уточняющие выключены") },
             modifier = Modifier.fillMaxWidth(),
         )
-        TextButton(onClick = {
-            scope.launch {
-                localStore.setClarifyQuestions(PerkurPresets.CLARIFY, botId)
-                clarify = PerkurPresets.CLARIFY
-            }
-        }) { Text("Загрузить 18 вопросов (как у перкур-бота)") }
         clarify.forEach { question ->
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text("• $question", style = MaterialTheme.typography.bodySmall,

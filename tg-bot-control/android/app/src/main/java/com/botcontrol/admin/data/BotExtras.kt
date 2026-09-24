@@ -12,13 +12,37 @@ data class InlineBtn(
     val id: String = "",
     val label: String = "",
     val toast: String = "",
-    val action: String = "text", // text | pack | reminders_on | reminders_off | script
+    val action: String = "text", // text | pack | reminders_on | reminders_off | script | url
     val packId: String = "",
     val text: String = "",
     val script: String = "",
     /** Если задан — кнопка-ссылка (например tg://user?id=… «Написать автору»). */
     val url: String = "",
-)
+    /** Ряд под сообщением: 0 — авто (по 2 в ряд, как раньше), 1..N — номер ряда. */
+    val row: Int = 0,
+    /** true — заменить текст сообщения с кнопкой, а не присылать новое. */
+    val edit: Boolean = false,
+    /** Всплывашка, если напоминания уже в нужном состоянии («Уже работает»). */
+    val toastNoChange: String = "",
+) {
+    val isUrl: Boolean get() = url.isNotBlank()
+}
+
+/**
+ * Раскладка кнопок по рядам Telegram. Старые меню (у всех row == 0)
+ * раскладываются по 2 в ряд, как раньше; явные ряды — как в коде бота.
+ */
+fun List<InlineBtn>.layoutRows(): List<List<InlineBtn>> {
+    if (isEmpty()) return emptyList()
+    if (all { it.row <= 0 }) return chunked(2)
+    val explicit = filter { it.row > 0 }.groupBy { it.row }.toSortedMap().values.map { it.toList() }
+    val loose = filter { it.row <= 0 }.map { listOf(it) }
+    return explicit + loose
+}
+
+/** Явные номера рядов 1..N для меню (для редактора и экспорта). */
+fun List<InlineBtn>.withExplicitRows(): List<InlineBtn> =
+    layoutRows().flatMapIndexed { index, row -> row.map { it.copy(row = index + 1) } }
 
 /** Событие расписания напоминаний. */
 data class ScheduleEvent(

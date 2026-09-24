@@ -230,6 +230,66 @@ CLARIFY_QUESTIONS = [
     "прямо сейчас?",
 ]
 
+# ---------- состояние напоминаний ----------
+user_chat_id = None
+bot_running = False
+
+
+def answer_callback(callback_id, text):
+    bot.answer_callback_query(callback_id, text)
+
+
+# ---------- обработчик нажатий на кнопки ----------
+@bot.callback_query_handler(func=lambda call: True)
+def on_callback(call):
+    global bot_running, user_chat_id
+
+    if call.data == "smoke_done":
+        answer_callback(call.id, "🚬 Записал")
+        if call.message:
+            bot.send_message(call.message.chat.id, random.choice(SMOKE_DONE_SARCASM))
+        return
+
+    if call.data == "smoke_healthy":
+        answer_callback(call.id, "💪 Записал")
+        if call.message:
+            bot.send_message(call.message.chat.id, random.choice(SMOKE_HEALTHY_SARCASM))
+        return
+
+    if call.data == "smoke_joke":
+        answer_callback(call.id, "Лови шутку")
+        if call.message:
+            bot.send_message(call.message.chat.id, random.choice(JOKES))
+        return
+
+    if not call.message:
+        return
+
+    if call.data == "start":
+        if bot_running:
+            answer_callback(call.id, "Уже работает")
+            return
+        bot_running = True
+        user_chat_id = call.message.chat.id
+        answer_callback(call.id, "Запущено")
+        bot.edit_message_text(START_SCHEDULE_TEXT, chat_id=call.message.chat.id,
+                              message_id=call.message.message_id, reply_markup=keyboard())
+    elif call.data == "stop":
+        if not bot_running:
+            answer_callback(call.id, "Уже остановлен")
+            return
+        bot_running = False
+        answer_callback(call.id, "Остановлено")
+        bot.edit_message_text(STOP_TEXT, chat_id=call.message.chat.id,
+                              message_id=call.message.message_id, reply_markup=keyboard())
+    else:
+        answer_callback(call.id, "Неизвестная кнопка")
+
+
+START_SCHEDULE_TEXT = """▶️ Напоминания включены. Нажми «Стоп», чтобы выключить."""
+
+STOP_TEXT = "⏹ Бот остановлен.\nНажми «Запуск», чтобы возобновить."
+
 # ---------- расписание: ежедневное / будни / Пн–Чт / пятница ----------
 def get_today_schedule(now):
     schedule = [
@@ -240,19 +300,19 @@ def get_today_schedule(now):
     wd = now.weekday()
     if wd < 5:
         schedule.extend([
-            (8, 55, "🔥 ПЕРЕКУР"),
-            (9, 55, "🔥 ПЕРЕКУР"),
-            (10, 55, "🔥 ПЕРЕКУР"),
+            (8, 55, "🔥 ПЕРЕКУР", smoke_keyboard()),
+            (9, 55, "🔥 ПЕРЕКУР", smoke_keyboard()),
+            (10, 55, "🔥 ПЕРЕКУР", smoke_keyboard()),
             (11, 30, "🍽 ОБЕД"),
-            (12, 55, "🔥 ПЕРЕКУР"),
-            (13, 55, "🔥 ПЕРЕКУР"),
-            (14, 55, "🔥 ПЕРЕКУР"),
+            (12, 55, "🔥 ПЕРЕКУР", smoke_keyboard()),
+            (13, 55, "🔥 ПЕРЕКУР", smoke_keyboard()),
+            (14, 55, "🔥 ПЕРЕКУР", smoke_keyboard()),
         ])
         if wd == 4:
-            schedule.append((15, 55, "🔥 ПЕРЕКУР и до завтра!"))
+            schedule.append((15, 55, "🔥 ПЕРЕКУР и до завтра!", smoke_keyboard()))
         else:
             schedule.extend([
-                (15, 55, "🔥 ПЕРЕКУР"),
+                (15, 55, "🔥 ПЕРЕКУР", smoke_keyboard()),
                 (16, 55, "до завтра!"),
             ])
     return sorted(schedule, key=lambda item: (item[0], item[1]))
