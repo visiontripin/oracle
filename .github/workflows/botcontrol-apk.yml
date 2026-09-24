@@ -4,7 +4,8 @@
 #   • артефакт BotControl-debug-apk (вкладка Actions → запуск → Artifacts);
 #   • аннотация «aapt» с `aapt dump badging` (package / versionCode / versionName);
 #   • если в сообщении коммита есть [apk] — тег botcontrol-v<версия>-code<код>
-#     (коммит с APK внутри, не ветка) + pre-release с файлом BotControl-debug.apk.
+#     (коммит с APK внутри, не ветка) + pre-release с файлом BotControl-debug.apk
+#     и всеми готовыми конфигами tg-bot-control/*-ready.py (прямые ссылки).
 name: BotControl APK
 
 on:
@@ -113,11 +114,22 @@ jobs:
             echo "\`\`\`"
             if [ -f tg-bot-control/RELEASE-NOTES.md ]; then echo; cat tg-bot-control/RELEASE-NOTES.md; fi
           } > "$NOTES"
+          # К релизу прикладываем APK и все готовые конфиги (*-ready.py),
+          # чтобы у каждого нужного файла была прямая ссылка на скачивание.
+          ASSETS="tg-bot-control/BotControl-debug.apk $(ls tg-bot-control/*-ready.py 2>/dev/null | tr '\n' ' ')"
+          {
+            echo
+            echo "## Прямые ссылки на скачивание"
+            for f in $ASSETS; do
+              n=$(basename "$f")
+              echo "- [${n}](https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/${n})"
+            done
+          } >> "$NOTES"
           if gh release view "$TAG" > /dev/null 2>&1; then
-            gh release upload "$TAG" tg-bot-control/BotControl-debug.apk --clobber
+            gh release upload "$TAG" $ASSETS --clobber
             gh release edit "$TAG" --notes-file "$NOTES" --prerelease
           else
-            gh release create "$TAG" tg-bot-control/BotControl-debug.apk \
+            gh release create "$TAG" $ASSETS \
               --prerelease --title "BotControl v${VN} (code ${VC})" --notes-file "$NOTES"
           fi
           echo "::notice title=release::${TAG}"
