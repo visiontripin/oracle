@@ -172,18 +172,13 @@ fun BotSettingsScreen(localStore: LocalBotStore, repository: com.botcontrol.admi
                 }
             }
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-            OutlinedButton(onClick = {
-                menu = menu + MenuCommand("", "")
-            }, modifier = Modifier.weight(1f)) { Text("+ Команда меню") }
-            OutlinedButton(onClick = {
-                menu = listOf(
-                    MenuCommand("start", "Запустить бота"),
-                    MenuCommand("help", "Что умеет бот"),
-                    MenuCommand("joke", "Случайная шутка"),
-                )
-            }, modifier = Modifier.weight(1f)) { Text("Пример") }
-        }
+        OutlinedButton(onClick = {
+            menu = menu + MenuCommand("", "")
+        }, modifier = Modifier.fillMaxWidth()) { Text("+ Команда меню") }
+        Text("Подсказка: обычно это start — «Запустить бота» и help — «Что умеет бот». " +
+            "Встроенных примеров нет — список составляй под своего бота.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(Modifier.height(4.dp))
         Button(onClick = {
             scope.launch {

@@ -42,109 +42,80 @@ import androidx.compose.ui.unit.dp
  */
 object BotPrompt {
 
-    private const val HEAD = """Ты — генератор конфигураций для приложения BotControl (Android: Telegram-боты, которые работают прямо на телефоне, ИИ — локально, без облака).
-Выведи РОВНО ОДИН блок кода на Python и ничего больше: без пояснений, без import, без обращений к API.
-Это НЕ исполняемый скрипт, а конфиг: приложение читает текст и раскладывает его по настройкам бота (код не запускается, поэтому import, requests, asyncio, sqlite бессмысленны).
+    private const val HEAD = """Ты — генератор конфигураций для BotControl (Android: локальные Telegram-боты, ИИ — на устройстве).
+Выведи РОВНО ОДИН блок Python-кода и ничего больше: без пояснений, без import. Это конфиг, а не исполняемый скрипт — приложение читает текст и раскладывает его по настройкам бота.
 
-СТРУКТУРА (порядок соблюдать):
-# Название бота — одна строка комментария
-BOT_TOKEN = "ТОКЕН_НЕ_ИМПОРТИРУЕТСЯ"
-SYSTEM_PROMPT = ( "строка 1" "строка 2" )      # характер ИИ, перенос строки пиши как \n
+СТРУКТУРА (порядок):
+# Название бота
+BOT_TOKEN = "НЕ_ИМПОРТИРУЕТСЯ"
+SYSTEM_PROMPT = ( "строка 1" "строка 2" )      # характер для сценариев ИИ, перенос строки как \n
 LLM_MAX_TOKENS = 80
 MAX_HISTORY = 4
 ANSWER_COOLDOWN = 10
 DEFAULT_TYPING_SECONDS = 4
-payload = { "temperature": 0.7, "max_tokens": LLM_MAX_TOKENS }
-# команды и кнопки (см. разделы 3-5)
+payload = { "temperature": 0.7 }
 ИМЯ_НАБОРА = [ "фраза", ... ]
 CLARIFY_QUESTIONS = [ "вопрос", ... ]
 def get_today_schedule(now): ...
+команды, клавиатуры, обработчики кнопок (разделы 3-7)
 
-1. ХАРАКТЕР. SYSTEM_PROMPT = ( "..." "..." ) — склейка строк в кавычках: кто бот, правила, тон, длина ответа, что запрещено.
-2. ЧИСЛА — только этими именами: LLM_MAX_TOKENS, LLM_MAX_TOP_K, MAX_HISTORY, ANSWER_COOLDOWN, DEFAULT_TYPING_SECONDS и payload с "temperature".
+ПРАВИЛА:
+1. ВСЁ, что бот ДЕЛАЕТ (команды, кнопки, наборы, расписание) — КОДОМ. ИИ не отвечает «на всё»: SYSTEM_PROMPT используется только в отдельных сценариях — команда /chat и правила с действием «ИИ» (пользователь включает их сам после импорта). Характер — кратко: роль, тон, длина ответа, запреты.
+2. ЧИСЛА — только эти имена: LLM_MAX_TOKENS, LLM_MAX_TOP_K, MAX_HISTORY, ANSWER_COOLDOWN, DEFAULT_TYPING_SECONDS и payload с "temperature".
 3. КОМАНДЫ — декоратор + функция, текст берётся из send_message:
 @bot.message_handler(commands=["start"])
 def cmd_start(msg):
     bot.send_message(msg.chat.id, "Привет, {name}! 👋", reply_markup=start_keyboard())
-   • имя функции — cmd_<латиницей>: cmd_start, cmd_help, cmd_rules (никакой кириллицы!);
-   • подстановки в тексте: {name} — имя пользователя, {text} — его сообщение, {bot} — ник бота;
-   • текст команды — до 2000 символов; /start и /help опиши обязательно.
-4. КНОПКИ ПОД СООБЩЕНИЕМ (inline) И ОБЯЗАТЕЛЬНЫЙ ОБРАБОТЧИК НАЖАТИЙ.
-   Меню — отдельная функция, затем прикрепи её reply_markup=имя_меню() к send_message:
-
+   • имя функции — cmd_<латиницей>; подстановки: {name} — имя пользователя, {text} — его сообщение, {bot} — ник бота;
+   • текст до 2000 символов; /start и /help — ОБЯЗАТЕЛЬНО.
+4. КНОПКИ (inline) — у КАЖДОЙ кнопки СВОЙ callback_data и СВОЯ ВЕТКА в обработчике нажатий:
 def start_keyboard():
     markup = InlineKeyboardMarkup()
     markup.row(InlineKeyboardButton("▶️ Запуск", callback_data="start"),
                InlineKeyboardButton("⏹ Стоп", callback_data="stop"))
-    markup.row(InlineKeyboardButton("🌐 Наш сайт", url="https://example.com"))
+    markup.row(InlineKeyboardButton("🌐 Сайт", url="https://example.com"))
     return markup
 
 @bot.callback_query_handler(func=lambda call: True)
 def on_callback(call):
-    global bot_running                      # флаг напоминаний (имя любое: reminders_on, active...)
+    global reminders_on                    # общий флаг (имя любое: active, bot_running...)
     if call.data == "start":
-        if bot_running:
+        if reminders_on:
             bot.answer_callback_query(call.id, "Уже работает")
             return
         bot.answer_callback_query(call.id, "Запущено")
-        bot_running = True
-        bot.edit_message_text(START_TEXT, chat_id=call.message.chat.id,
+        reminders_on = True
+        bot.edit_message_text(TEXT_ON, chat_id=call.message.chat.id,
                               message_id=call.message.message_id, reply_markup=start_keyboard())
     elif call.data == "stop":
         bot.answer_callback_query(call.id, "Остановлено")
-        bot_running = False
-        bot.edit_message_text(STOP_TEXT, chat_id=call.message.chat.id,
+        reminders_on = False
+        bot.edit_message_text(TEXT_OFF, chat_id=call.message.chat.id,
                               message_id=call.message.message_id, reply_markup=start_keyboard())
     elif call.data == "joke":
-        bot.answer_callback_query(call.id, "Лови шутку")
+        bot.answer_callback_query(call.id, "Лови")
         bot.send_message(call.message.chat.id, random.choice(JOKES))
-
-   Что приложение понимает в обработчике:
-   • bot.answer_callback_query(call.id, "текст") — всплывашка при нажатии;
-   • bot.send_message(...) — новое сообщение (текст или random.choice(НАБОР));
-   • bot.edit_message_text(...) — заменить текст сообщения под кнопкой;
-   • присваивание флага напоминаний (bot_running = True/False) — кнопка включает/выключает напоминания;
-     всплывашка ПЕРЕД присваиванием («Уже работает») станет ответом на повторное нажатие;
-   • url="..." — кнопка-ссылка, она не шлёт ничего боту;
-   • ветки можно оформлять как if/elif по call.data или как @bot.callback_query_handler(func=lambda call: call.data == "...").
-5. КЛАВИАТУРА ВНИЗУ ЧАТА и ответы на неё (по желанию):
-
+   Понимается: answer_callback_query → всплывашка; send_message → новое сообщение (текст или random.choice(НАБОР)); edit_message_text → заменить текст под кнопкой; присваивание общего флага (reminders_on = True/False) → вкл/выкл напоминаний; всплывашка ПЕРЕД присваиванием → ответ на повторное нажатие; url="..." → кнопка-ссылка (без callback_data); меню крепится reply_markup=имя_меню().
+   callback_data — короткие УНИКАЛЬНЫЕ латинские имена (start, stop, done...).
+5. КЛАВИАТУРА ВНИЗУ ЧАТА (необязательно):
 def chat_keyboard():
     markup = ReplyKeyboardMarkup(resize_keyboard=True)
-    markup.row(KeyboardButton("🎲 Шутка"), KeyboardButton("📋 Мои объявления"))
+    markup.row(KeyboardButton("🎲 Шутка"))
     return markup
-
 @bot.message_handler(func=lambda m: m.text == "🎲 Шутка")
 def btn_joke(msg):
     bot.send_message(msg.chat.id, random.choice(JOKES))
-
-@bot.message_handler(func=lambda m: "цена" in (m.text or "").lower())
-def on_price(msg):
-    bot.send_message(msg.chat.id, "Прайс: ...")
-
-   • func=lambda m: m.text == "..." — точное совпадение (кнопка клавиатуры);
-   • func=lambda m: "фраза" in (m.text or "").lower() — бот реагирует на фразу в тексте;
-   • чтобы клавиатура появилась, прикрепи её: bot.send_message(..., reply_markup=chat_keyboard()).
-6. НАБОРЫ ОТВЕТОВ — ИМЯ = [ "фраза", ... ]: имя ЗАГЛАВНЫМИ латиницей через подчёркивание,
-   один элемент на одной строке, закрывающая ] — ОБЯЗАТЕЛЬНО на отдельной строке.
-   Использовать: random.choice(ИМЯ) в send_message или в обработчике кнопки.
-7. РАСПИСАНИЕ — только внутри def get_today_schedule(now):, кортежи (ЧАС, МИНУТЫ, "текст")
-   или (ЧАС, МИНУТЫ, "текст", имя_меню()) — меню под напоминанием. Часы 0-23, минуты 0-59.
-   Зоны дней недели:
-   • кортежи ДО строки if wd < 5: — каждый день;
-   • внутри if wd < 5: — будни Пн–Пт;
-   • внутри if wd == 4: — только пятница;
-   • внутри else: после пятничной ветки — Пн–Чт;
-   • годятся и now.isoweekday(), и if wd in (5, 6):, и if 0 <= wd <= 4:.
-   Текст, начинающийся с »канал, публикуется в канал; варианты через " | " чередуются по дням.
-8. РЕЕСТР ЗАРЕЗЕРВИРОВАННЫХ ИМЁН (не занимать под свои наборы и переменные):
-   BOT_TOKEN, SYSTEM_PROMPT, LLM_MAX_TOKENS, LLM_MAX_TOP_K, MAX_HISTORY, HISTORY_LIMIT,
-   ANSWER_COOLDOWN, COOLDOWN, TYPING_SECONDS, DEFAULT_TYPING_SECONDS,
-   schedule, commands, content_types, messages, history, days, buttons, menu, items, payload,
-   choices, keyboards, get_today_schedule, cmd_<имя>, keyboard(), smoke_keyboard().
-   Свои наборы называй иначе: MORNING_PHRASES, FAQ_ANSWERS, THANK_YOU_LINES, CROISSANT_JOKES.
-9. ЗАПРЕЩЕНО: f-строки с выражениями, вложенные списки и словари внутри списков, import,
-   requests/asyncio/os/sqlite, регулярки, HTML-разметка, markdown. Только строки, числа и вызовы выше.
+   • m.text == "..." — точное совпадение (кнопка клавиатуры);
+   • "фраза" in (m.text or "").lower() — реакция на фразу в тексте;
+   • клавиатура появляется, только если прикреплена: bot.send_message(..., reply_markup=chat_keyboard()).
+6. НАБОРЫ — ИМЯ = [ "фраза", ... ]: имя ЗАГЛАВНЫМИ латиницей с _, одна фраза на строке, закрывающая ] — на отдельной строке. Использование: random.choice(ИМЯ).
+7. РАСПИСАНИЕ — только внутри def get_today_schedule(now):, кортежи (ЧАС, МИНУТЫ, "текст") или (ЧАС, МИНУТЫ, "текст", имя_меню()) — меню под напоминанием. Часы 0-23, минуты 0-59. Дни:
+   • кортежи ДО if wd < 5: — каждый день; внутри if wd < 5: — будни; внутри if wd == 4: — пятница; внутри else — Пн–Чт;
+   • годятся now.isoweekday(), if wd in (5, 6):, if 0 <= wd <= 4:.
+   • текст, начинающийся с »канал, — публикация в канал; варианты через " | " чередуются по дням.
+8. ЗАРЕЗЕРВИРОВАНО (не занимать): BOT_TOKEN, SYSTEM_PROMPT, LLM_MAX_TOKENS, LLM_MAX_TOP_K, MAX_HISTORY, ANSWER_COOLDOWN, DEFAULT_TYPING_SECONDS, schedule, commands, content_types, messages, history, days, buttons, menu, items, payload, choices, keyboards, get_today_schedule, cmd_*.
+   Свои наборы называй иначе: MORNING_PHRASES, FAQ_ANSWERS, THANK_YOU_LINES.
+9. ЗАПРЕЩЕНО: f-строки с выражениями, import, requests/asyncio/os, регулярки, вложенные списки/словари, HTML/markdown.
 
 ЗАДАНИЕ: создай бота:"""
 

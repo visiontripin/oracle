@@ -268,6 +268,9 @@ private suspend fun applyParsed(
     if (wanted(ScriptImporter.SEC_COMMANDS)) rulesToApply += parsed.commands
     if (wanted(ScriptImporter.SEC_RULES)) rulesToApply += parsed.textRules
     var rulesSaved = 0
+    var rulesUpdated = 0
+    var rulesDropped = 0
+    var ruleButtons = 0
     for (imp in rulesToApply) {
         val menu = buttonsFixed(imp.menu)
         val action = when (imp.actionType) {
@@ -278,11 +281,19 @@ private suspend fun applyParsed(
         }
         val packForRule = if (action == "pack") packId(imp.packId) else ""
         if (action == "text" && imp.text.isBlank()) continue // пустой текст — нечего сохранять
-        val existing = repository.botRules(botId).firstOrNull {
-            it.type == imp.type && it.pattern.equals(imp.pattern, ignoreCase = true)
+        // Самоисцеление: ищем уже сохранённое правило ПО ПАТТЕРНУ, не по типу.
+        // Старые версии могли сохранить то же правило иначе (другой тип,
+        // другой формат), и тогда новый импорт создавал дубль, а старые
+        // кнопки в правиле оставались нерабочими. Теперь обновляем на месте
+        // и чистим дубли.
+        val existingAll = if (imp.pattern.isBlank()) emptyList()
+        else repository.botRules(botId).filter {
+            it.pattern.equals(imp.pattern, ignoreCase = true)
         }
+        val existing = existingAll.firstOrNull()
         val entity = if (existing != null) {
             existing.copy(
+                type = imp.type,
                 actionType = action,
                 responseText = if (action == "text") imp.text else "",
                 packId = packForRule,
@@ -302,9 +313,22 @@ private suspend fun applyParsed(
             )
         }
         repository.saveBotRule(entity)
-        rulesSaved++
+        ruleButtons += menu.size
+        if (existing == null) {
+            rulesSaved++
+        } else {
+            rulesUpdated++
+            existingAll.filter { it.id != entity.id }.forEach { dup ->
+                repository.deleteBotRule(dup.id)
+                rulesDropped++
+            }
+        }
     }
-    if (rulesSaved > 0) done.add("правил: $rulesSaved")
+    if (rulesSaved + rulesUpdated > 0) {
+        done.add("правил: ${rulesSaved + rulesUpdated}" +
+            (if (rulesUpdated > 0) " (обновлено $rulesUpdated)" else "") +
+            (if (rulesDropped > 0) " (убрано дублей $rulesDropped)" else ""))
+    }
 
     // ---------- меню Telegram (кнопка «Меню») ----------
     if (parsed.menuCommands.isNotEmpty() && wanted(ScriptImporter.SEC_COMMANDS)) {
@@ -322,6 +346,7 @@ private suspend fun applyParsed(
     }
 
     // ---------- расписание ----------
+    var schedButtons = 0
     if (parsed.schedule.isNotEmpty() && wanted(ScriptImporter.SEC_SCHEDULE)) {
         val current = localStore.schedule(botId).toMutableList()
         var added = 0
@@ -332,6 +357,7 @@ private suspend fun applyParsed(
             }
             val fixed = ev.copy(menu = buttonsFixed(ev.menu), id = if (same >= 0) current[same].id else ev.id)
             if (same >= 0) { current[same] = fixed; replaced++ } else { current.add(fixed); added++ }
+            schedButtons += ev.menu.size
         }
         localStore.setSchedule(current, botId)
         // В оригинале напоминания включаются сразу после запуска — иначе
@@ -345,6 +371,9 @@ private suspend fun applyParsed(
         parsed.channel?.let { localStore.setChannelId(it, botId); done.add("канал $it") }
         parsed.listingsOn?.let { localStore.setListingsOn(it, botId) }
     }
+
+    val totalButtons = ruleButtons + schedButtons
+    if (totalButtons > 0) done.add("кнопок: $totalButtons")
 
     return if (done.isEmpty()) "Нечего применять — отметь хотя бы одну категорию"
     else done.joinToString(", ")

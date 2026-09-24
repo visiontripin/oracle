@@ -70,7 +70,7 @@ fun LocalBotScreen(
 
     var rules by remember { mutableStateOf<List<BotRuleEntity>>(emptyList()) }
     var keyboard by remember { mutableStateOf<List<String>>(emptyList()) }
-    var llmEnabled by remember { mutableStateOf(true) }
+    var llmEnabled by remember { mutableStateOf(false) }
     var systemPrompt by remember { mutableStateOf("") }
     var defaultReply by remember { mutableStateOf("") }
     var error by remember { mutableStateOf("") }
@@ -221,11 +221,12 @@ fun LocalBotScreen(
         }
 
         // ---- AI ----
-        SectionTitle("Искусственный интеллект (на телефоне)")
+        SectionTitle("ИИ — фича, а не ответ «на всё»")
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Text("Отвечать ИИ на незнакомые сообщения")
-                Text("Модель работает локально, интернет-ИИ не нужен",
+                Text("Включить ИИ")
+                Text("ИИ отвечает ТОЛЬКО в сценариях: правило с действием «ИИ» и команда /chat. " +
+                    "Команды, кнопки, наборы и расписание работают без ИИ — кодом.",
                     style = MaterialTheme.typography.bodySmall)
             }
             Switch(llmEnabled, onCheckedChange = {

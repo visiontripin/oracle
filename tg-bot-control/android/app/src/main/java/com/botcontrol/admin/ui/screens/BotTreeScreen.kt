@@ -60,10 +60,14 @@ fun BotTreeScreen(
     var confirmDelete by remember { mutableStateOf(false) }
     var confirmReset by remember { mutableStateOf(false) }
     var info by remember { mutableStateOf("") }
+    var llmOn by remember { mutableStateOf(false) }
+    var aiModel by remember { mutableStateOf("") }
 
     LaunchedEffect(botId) {
         localStore.setActiveBot(botId)
         profile = localStore.profile(botId)
+        llmOn = localStore.llmEnabled(botId)
+        aiModel = localStore.aiModel(botId)
     }
 
     val st = states[botId]
@@ -132,6 +136,35 @@ fun BotTreeScreen(
                         OutlinedButton(onClick = { confirmDelete = true },
                             modifier = Modifier.weight(1f)) { Text("🗑 Удалить") }
                     }
+                    Spacer(Modifier.height(6.dp))
+                    // ИИ — фича по сценариям: по умолчанию выключен, отвечает
+                    // только по правилам с действием «ИИ» и по команде /chat.
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text("🤖 ИИ (сценарии и /chat)",
+                                style = MaterialTheme.typography.bodyMedium)
+                            Text(
+                                if (aiModel.isBlank()) "модель не выбрана — функции бота работают кодом"
+                                else "модель: ${aiModel.take(32)}",
+                                style = MaterialTheme.typography.bodySmall)
+                        }
+                        Switch(
+                            llmOn,
+                            onCheckedChange = { on ->
+                                llmOn = on
+                                scope.launch { localStore.setLlmEnabled(on, botId) }
+                            },
+                        )
+                    }
+                    Spacer(Modifier.height(6.dp))
+                    OutlinedButton(onClick = { confirmReset = true },
+                        modifier = Modifier.fillMaxWidth()) {
+                        Text("⚠️ Сбросить настройки бота") }
+                    Text("Удаляет всё настроенное: правила, расписание, клавиатуру, ИИ, меню. " +
+                        "Имя и токен остаются.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(Modifier.height(6.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
                             Text("Этот бот включён",
@@ -262,15 +295,6 @@ fun BotTreeScreen(
             Text(info, color = MaterialTheme.colorScheme.primary,
                 style = MaterialTheme.typography.bodySmall)
         }
-        OutlinedButton(onClick = { confirmReset = true }, modifier = Modifier.fillMaxWidth()) {
-            Text("⚠️ Сбросить настройки бота")
-        }
-        Text("Удаляет ВСЁ, что настроено у этого бота: правила и сценарии, расписание, "
-            + "клавиатуру, характер и параметры ИИ, уточняющие вопросы, меню команд, канал "
-            + "и объявления. Имя бота и токен остаются.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant)
-
         Spacer(Modifier.height(24.dp))
     }
 

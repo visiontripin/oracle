@@ -20,8 +20,14 @@ data class BotDecision(
 )
 
 /**
- * Единый «мозг» бота: правила → скрипт/набор → ИИ (с контекстом) → запасной
- * ответ. Используется и сервисом (реальный Telegram), и вкладкой имитации —
+ * Единый «мозг» бота. Порядок:
+ *  1) правила (текст / скрипт JS / набор — всегда КОД, без ИИ);
+ *  2) сценарий ИИ — только явно: команда /chat (+ вопрос) или правило с
+ *     действием «ИИ»; ИИ по умолчанию выключен и никогда не отвечает
+ *     «на всё» — функции бота выполняются исполнением кода;
+ *  3) антифлуд;
+ *  4) кодовый запасной ответ (уточняющий вопрос / default).
+ * Используется и сервисом (реальный Telegram), и вкладкой имитации —
  * поведение в тесте и в бою гарантированно одинаковое.
  */
 object BotBrain {
@@ -135,7 +141,29 @@ object BotBrain {
         }
         trace?.invoke("Ни одно правило не подошло")
 
-        // 2) антифлуд на «незнакомых» сообщениях (как ANSWER_COOLDOWN в оригинале)
+        // 2) Явная команда «ИИ-сценарий»: /chat (или /ai) + вопрос.
+    //    ИИ — это ФИЧА, отдельный сценарий, а не ответ «на всё».
+        val aiCommand = Regex("^/(chat|ai)(@\\w+)?\\s*(.*)$", RegexOption.IGNORE_CASE).find(text)
+        if (aiCommand != null) {
+            val question = aiCommand.groupValues[3].trim()
+            return if (question.isBlank()) {
+                BotDecision("ИИ-сценарий",
+                    "Спроси так: /chat + вопрос. ИИ отвечает только в этом сценарии " +
+                        "и по правилам с действием «ИИ» — всё остальное бот делает кодом.")
+            } else if (!store.llmEnabled(botId)) {
+                BotDecision("ИИ-сценарий",
+                    "🤖 ИИ выключен: включи в «Сценарии → Правила ответов» (переключатель «ИИ»). " +
+                        "Остальные функции работают без ИИ.")
+            } else if (store.aiModel(botId).isBlank()) {
+                BotDecision("ИИ-сценарий",
+                    "🤖 ИИ не настроен: «ИИ → Модели ИИ» → скачай модель и выбери её.")
+            } else {
+                trace?.invoke("🤖 Сценарий /chat — спрашиваю ИИ…")
+                llmReply(context, store, botId, chatId, firstName, question, onLlmStart, trace)
+            }
+        }
+
+        // 3) Антифлуд на «незнакомых» сообщениях (как ANSWER_COOLDOWN в оригинале)
         val cd = store.cooldownSec().toLong()
         if (respectCooldown && cd > 0) {
             val now = System.currentTimeMillis() / 1000
@@ -147,8 +175,9 @@ object BotBrain {
             lastAnswerAt[chatId] = now
         }
 
-        // 3) ИИ / запасной ответ
-        return llmReply(context, store, botId, chatId, firstName, text, onLlmStart, trace)
+        // 4) Кодовый запасной ответ (уточняющий вопрос или default).
+        //    ИИ здесь НЕ вызывается: он — только в сценариях (шаг 2, правило «ИИ»).
+        return fallback(store)
     }
 
     private suspend fun llmReply(

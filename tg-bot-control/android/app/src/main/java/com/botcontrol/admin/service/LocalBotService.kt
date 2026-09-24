@@ -361,8 +361,20 @@ class LocalBotService : Service() {
         val btn = hit?.first
         // Всегда отвечаем на callback, чтобы в Telegram не висели «часики».
         if (btn == null) {
-            DeviceLlm.log("⚠️ Кнопка '${cb.data}' не найдена в меню правил/расписания")
-            api.answerCallbackQuery(cb.callbackId, "Кнопка устарела")
+            // Диагностика: что бот знает сейчас — видно в «Журнал событий».
+            val known = LinkedHashSet<String>()
+            app.repository.botRules(botId).forEach { rule ->
+                known.addAll(BotBrain.parseMenu(rule.menu).map { it.id })
+            }
+            store.schedule(botId).forEach { event ->
+                known.addAll(event.menu.withIds().map { it.id })
+            }
+            DeviceLlm.log("⚠️ Кнопка '${cb.data}' не найдена в меню этого бота. " +
+                "Известно: ${known.ifEmpty { listOf("— (меню пусто — пересоздай правила/расписание)") }.joinToString(", ").take(300)}")
+            api.answerCallbackQuery(
+                cb.callbackId,
+                "Кнопка устарела: пересыль /start или нажми кнопку в новом сообщении",
+            )
             return
         }
         DeviceLlm.log("🔘 Кнопка «${btn.label}» (${btn.action})")
@@ -411,6 +423,11 @@ class LocalBotService : Service() {
                     },
                     inlineMenu = menu,
                 )
+            }
+            "url" -> {
+                // Кнопка-ссылка: Telegram сам открывает url, боту делать
+                // нечего (всплывашка уже отправлена). Раньше сюда падало
+                // и присылали пустой текст «…».
             }
             else -> {
                 val reply = btn.text.ifBlank { "…" }

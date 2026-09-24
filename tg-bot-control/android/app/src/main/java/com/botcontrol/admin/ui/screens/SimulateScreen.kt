@@ -48,7 +48,8 @@ private data class SimResult(
 
 /**
  * Имитация поведения бота: проверка логики без Telegram. Использует тот же
- * «мозг» (BotBrain), что и реальный бот: правила → скрипт/набор → ИИ → запасной.
+ * «мозг» (BotBrain), что и реальный бот: правила (код) → сценарий ИИ
+ * (/chat, правило «ИИ») → антифлуд → кодовый запасной ответ.
  */
 @Composable
 fun SimulateScreen(
@@ -122,7 +123,7 @@ fun SimulateScreen(
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
             OutlinedButton(onClick = { input = "привет" }) { Text("привет") }
             OutlinedButton(onClick = { input = "/start" }) { Text("/start") }
-            OutlinedButton(onClick = { input = "🔥 ПЕРЕКУР" }) { Text("перекур") }
+            OutlinedButton(onClick = { input = "/chat как дела?" }) { Text("🤖 /chat") }
             OutlinedButton(onClick = { results.clear() }) { Text("Очистить") }
         }
         Spacer(Modifier.height(8.dp))

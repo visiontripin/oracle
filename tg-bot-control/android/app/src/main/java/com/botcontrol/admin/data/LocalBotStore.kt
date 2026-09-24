@@ -350,9 +350,15 @@ class LocalBotStore(context: Context) {
     }
 
     // ---------- характер и ИИ (на бота) ----------
+    /**
+     * ИИ ВКЛЮЧАЕТСЯ ТОЛЬКО ПО НЕОБХОДИМОСТИ: по умолчанию выключен.
+     * Даже при вкл. ИИ не отвечает «на всё»: только по правилам с действием
+     * «ИИ» и по явной команде /chat. Функции бота работают кодом (правила,
+     * наборы, скрипты, расписание) без ИИ.
+     */
     suspend fun llmEnabled(botId: Long = -1L): Boolean {
         val id = resolveId(botId)
-        return appContext.localBotDataStore.data.map { it[llmKey(id)] ?: true }.first()
+        return appContext.localBotDataStore.data.map { it[llmKey(id)] ?: false }.first()
     }
 
     suspend fun setLlmEnabled(value: Boolean, botId: Long = -1L) {
