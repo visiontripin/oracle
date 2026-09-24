@@ -5,6 +5,7 @@ import com.botcontrol.admin.data.BotFiles
 import com.botcontrol.admin.data.InlineBtn
 import com.botcontrol.admin.data.Listing
 import com.botcontrol.admin.data.LocalBotStore
+import com.botcontrol.admin.BotControlApp
 import com.botcontrol.admin.data.telegram.TelegramApi
 import com.botcontrol.admin.llm.DeviceLlm
 
@@ -43,6 +44,115 @@ object ListingEngine {
     private val menuKeyboard = listOf(BTN_NEW, BTN_MY)
 
     // ==================================================================
+    // Входы «снаружи»: по намерению, а не по коду кнопки движка (lst_*).
+    // Нужны, чтобы импортированная или созданная вручную кнопка с надписью
+    // «📝 Разместить объявление» / «добавить объявление» тоже запускала
+    // визард, даже если её callback_data пришёл из чужого скрипта.
+    // ==================================================================
+
+    /** Начать новое объявление (шаг 1 — описание). */
+    suspend fun startWizard(
+        context: Context,
+        store: LocalBotStore,
+        api: TelegramApi,
+        botId: Long,
+        chatId: Long,
+        replyKeyboard: List<String>,
+    ) {
+        drafts[key(botId, chatId)] = Draft(state = State.DESC)
+        api.sendMessage(
+            chatId,
+            "📝 Шаг 1 из 4 — описание.\n\nОпиши вещь одним сообщением: что отдаёшь, город/район, состояние.\nПример: «Кресло кожаное, Приморский район, б/у, самовывоз».\n\n❌ Отмена — прекратить.",
+            keyboard = menuWith(replyKeyboard),
+        )
+    }
+
+    /** Отменить текущее действие и показать меню. */
+    suspend fun cancelWizard(
+        api: TelegramApi,
+        botId: Long,
+        chatId: Long,
+        replyKeyboard: List<String>,
+    ) {
+        drafts.remove(key(botId, chatId))
+        api.sendMessage(
+            chatId,
+            "❌ Действие отменено. Выбери кнопку ниже 👇",
+            keyboard = menuWith(replyKeyboard),
+        )
+    }
+
+    /** Текст своего правила /start (если задан) — чтобы не подменять его. */
+    private suspend fun ownGreeting(context: Context, botId: Long, firstName: String): String? {
+        return try {
+            val app = context.applicationContext as BotControlApp
+            app.repository.botRules(botId).firstOrNull { r ->
+                r.enabled && r.type == "command" &&
+                    r.pattern.trim().trimStart('/').equals("start", ignoreCase = true) &&
+                    r.actionType == "text" && r.responseText.isNotBlank()
+            }?.responseText?.replace("{user}", firstName)?.trim()?.ifBlank { null }
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    // ---------- распознавание намерений ----------
+    // Разные люди пишут по-разному, поэтому сравниваем не только точные
+    // надписи кнопок: «добавить объявление» = «📝 Разместить объявление».
+    private val NEW_WORDS = listOf(
+        "добавить", "разместить", "создать", "сделать", "подать", "опубликовать",
+        "выложить", "закинуть", "новое", "новую", "новый", "ещё одну", "еще одну",
+    )
+    private val CANCEL_WORDS = listOf("/cancel", "отмена", "отменить", "отменяй", "прервать", "отмени")
+
+    /** «добавить объявление», «новое объявление», «хочу отдать …», /new. */
+    fun looksLikeNew(text: String): Boolean {
+        val n = text.trim().lowercase()
+        if (n == BTN_NEW.lowercase()) return true
+        if (n == "/new" || n.startsWith("/new ")) return true
+        if (n.contains("хочу отдать") || n.contains("хочу разместить")) return true
+        if (!n.contains("объявл")) return false
+        return NEW_WORDS.any { n.contains(it) }
+    }
+
+    /** «мои объявления», «мои», «что у меня», /my. */
+    fun looksLikeMy(text: String): Boolean {
+        val n = text.trim().lowercase()
+        if (n == BTN_MY.lowercase()) return true
+        if (n == "/my" || n.startsWith("/my ")) return true
+        if (n == "мои" || n == "моё" || n == "мое") return true
+        return n.contains("мои объявл") || n.contains("мои публикации") ||
+            n.contains("список объявл") || n.contains("что у меня")
+    }
+
+    /** «отмена», «отменить», «❌ Отмена», /cancel. */
+    fun looksLikeCancel(text: String): Boolean {
+        val n = text.trim().lowercase()
+        if (n == BTN_CANCEL.lowercase()) return true
+        return CANCEL_WORDS.any { n.contains(it) }
+    }
+
+    /** Текст — явный запрос функций объявлений (визард, «мои», отмена). */
+    fun looksLikeTrigger(text: String): Boolean {
+        val n = text.trim().lowercase()
+        return looksLikeNew(n) || looksLikeMy(n) || looksLikeCancel(n)
+    }
+
+    /**
+     * Клавиатура чата + обязательные кнопки движка. Пользовательские
+     * надписи сохраняем (например «добавить объявление»), но дописываем
+     * недостающие «Мои объявления» и «Отмена» — без них визард тупиковый.
+     */
+    private fun menuWith(replyKeyboard: List<String>): List<String> {
+        if (replyKeyboard.isEmpty()) return menuKeyboard
+        val out = replyKeyboard.toMutableList()
+        if (!replyKeyboard.any { looksLikeMy(it) }) out.add(BTN_MY)
+        if (!replyKeyboard.any { looksLikeCancel(it) }) out.add(BTN_CANCEL)
+        if (!replyKeyboard.any { looksLikeNew(it) }) out.add(BTN_NEW)
+        return out
+    }
+
+    // ==================================================================
     // Текстовые сообщения
     // ==================================================================
 
@@ -61,27 +171,25 @@ object ListingEngine {
         val norm = text.trim().lowercase()
         val draft = drafts[k]
 
-        // ---------- глобальные триггеры ----------
-        val isNew = norm == BTN_NEW.lowercase() || norm == "/new" || norm == "разместить объявление"
-        val isMy = norm == BTN_MY.lowercase() || norm == "/my" || norm == "мои объявления"
-        val isCancel = norm == BTN_CANCEL.lowercase() || norm == "/cancel" || norm == "отмена"
+        // ---------- глобальные триггеры (гибкое распознавание) ----------
+        // Пользователь пишет по-разному: «добавить объявление», «новое
+        // объявление», «/new», «хочу отдать диван». Раньше годилось только
+        // точное совпадение — кнопка с другой надписью не запускала визард.
+        val isNew = looksLikeNew(norm)
+        val isMy = looksLikeMy(norm)
+        val isCancel = looksLikeCancel(norm)
 
         if (isCancel) {
             drafts.remove(k)
             api.sendMessage(
                 chatId,
                 "❌ Действие отменено. Выбери кнопку ниже 👇",
-                keyboard = replyKeyboard.ifEmpty { menuKeyboard },
+                keyboard = menuWith(replyKeyboard),
             )
             return true
         }
         if (isNew) {
-            drafts[k] = Draft(state = State.DESC)
-            api.sendMessage(
-                chatId,
-                "📝 Шаг 1 из 4 — описание.\n\nОпиши вещь одним сообщением: что отдаёшь, город/район, состояние.\nПример: «Кресло кожаное, Приморский район, б/у, самовывоз».\n\n❌ Отмена — прекратить.",
-                keyboard = replyKeyboard.ifEmpty { menuKeyboard },
-            )
+            startWizard(context, store, api, botId, chatId, replyKeyboard)
             return true
         }
         if (isMy) {
@@ -92,14 +200,17 @@ object ListingEngine {
         // ---------- /start: приветствие ----------
         if (norm == "/start") {
             drafts.remove(k)
+            // Своё приветствие из правил (например импортированное
+            // «Добро пожаловать… Выбирай кнопки ниже 👇») не теряем —
+            // берём его и просто добавляем к нему меню объявлений.
+            val own = ownGreeting(context, botId, firstName)
             api.sendMessage(
                 chatId,
-                "👋 $firstName, добро пожаловать в «Даром в ПЛ»!\n\n" +
+                own ?: ("👋 $firstName, добро пожаловать!\n\n" +
                     "Здесь отдают вещи бесплатно. Выбери действие кнопкой ниже 👇\n\n" +
                     "📝 Разместить объявление — опубликую твою вещь в канале.\n" +
-                    "📋 Мои объявления — статистика, переопубликовать или удалить.\n\n" +
-                    "Правила: только даром, самовывоз по умолчанию, спам удаляется.",
-                keyboard = replyKeyboard.ifEmpty { menuKeyboard },
+                    "📋 Мои объявления — статистика, переопубликовать или удалить."),
+                keyboard = menuWith(replyKeyboard),
             )
             return true
         }
@@ -207,7 +318,7 @@ object ListingEngine {
                 drafts.remove(k)
                 api.answerCallbackQuery(callbackId, "Отменено")
                 api.sendMessage(chatId, "❌ Действие отменено. Выбери кнопку ниже 👇",
-                    keyboard = replyKeyboard.ifEmpty { menuKeyboard })
+                    keyboard = menuWith(replyKeyboard))
             }
             data == "lst_contact_msg" -> {
                 if (draft == null) return stale(api, callbackId)
@@ -241,7 +352,7 @@ object ListingEngine {
                 drafts.remove(k)
                 api.answerCallbackQuery(callbackId, "Отменено")
                 api.editMessageText(chatId, messageId, "❌ Публикация отменена.")
-                api.sendMessage(chatId, "Главное меню 👇", keyboard = replyKeyboard.ifEmpty { menuKeyboard })
+                api.sendMessage(chatId, "Главное меню 👇", keyboard = menuWith(replyKeyboard))
             }
             data.startsWith("lst_del_") -> {
                 val id = data.removePrefix("lst_del_")
@@ -259,7 +370,7 @@ object ListingEngine {
                 api.answerCallbackQuery(callbackId, "🗑 Удалено")
                 DeviceLlm.log("🗑 [$botId] Объявление ${target.id} удалено из канала (${target.messageIds.size} сообщ.)")
                 api.editMessageText(chatId, messageId, "🗑 Объявление удалено из канала.\n\nВыбери действие 👇")
-                api.sendMessage(chatId, "Главное меню 👇", keyboard = replyKeyboard.ifEmpty { menuKeyboard })
+                api.sendMessage(chatId, "Главное меню 👇", keyboard = menuWith(replyKeyboard))
             }
             data.startsWith("lst_rep_") -> {
                 val id = data.removePrefix("lst_rep_")
@@ -413,11 +524,11 @@ object ListingEngine {
         api.sendMessage(
             chatId,
             "✅ Объявление опубликовано в канале $channel!\n\nКогда вещь найдёт хозяина — «📋 Мои объявления» → 🗑 Удалить, чтобы убрать пост из канала.",
-            keyboard = replyKeyboard.ifEmpty { menuKeyboard },
+            keyboard = menuWith(replyKeyboard),
         )
     }
 
-    private suspend fun showMyListings(
+    suspend fun showMyListings(
         context: Context,
         store: LocalBotStore,
         api: TelegramApi,
@@ -434,7 +545,7 @@ object ListingEngine {
         sb.append("Активных: $active\n\n")
         if (all.isEmpty()) {
             sb.append("📭 Пока пусто. Нажми «📝 Разместить объявление» 👇")
-            api.sendMessage(chatId, sb.toString(), keyboard = replyKeyboard.ifEmpty { menuKeyboard })
+            api.sendMessage(chatId, sb.toString(), keyboard = menuWith(replyKeyboard))
             return
         }
         all.sortedByDescending { it.createdAt }.forEach { l ->
@@ -463,7 +574,7 @@ object ListingEngine {
         api.sendMessage(
             chatId,
             "🔄 — опубликовать снова, 🗑 — удалить из канала. Или «📝 Разместить объявление» 👇",
-            keyboard = replyKeyboard.ifEmpty { menuKeyboard },
+            keyboard = menuWith(replyKeyboard),
         )
     }
 

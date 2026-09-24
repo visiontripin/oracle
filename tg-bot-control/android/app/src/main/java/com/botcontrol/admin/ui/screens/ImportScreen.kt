@@ -37,6 +37,7 @@ import com.botcontrol.admin.data.BotRepository
 import com.botcontrol.admin.data.InlineBtn
 import com.botcontrol.admin.data.LocalBotStore
 import com.botcontrol.admin.data.ScriptImporter
+import com.botcontrol.admin.service.ListingEngine
 import com.botcontrol.admin.data.local.BotRuleEntity
 import com.botcontrol.admin.data.withIds
 import com.botcontrol.admin.llm.DeviceLlm
@@ -337,11 +338,30 @@ private suspend fun applyParsed(
     }
 
     // ---------- клавиатура чата ----------
-    if (parsed.keyboardRows.isNotEmpty() && wanted(ScriptImporter.SEC_KEYBOARD)) {
-        val flat = parsed.keyboardRows.flatten().map { it.trim() }.filter { it.isNotBlank() }
-        if (flat.isNotEmpty()) {
-            localStore.setKeyboard(flat, botId)
-            done.add("кнопок клавиатуры: ${flat.size}")
+    // Кнопка клавиатуры при нажатии просто отправляет свою надпись текстом.
+    // Если правила с таким образцом нет, нажатие падает в запасной ответ —
+    // поэтому сразу считаем такие кнопки и показываем их в сводке.
+    val kbLabels: List<String> = if (parsed.keyboardRows.isNotEmpty() && wanted(ScriptImporter.SEC_KEYBOARD)) {
+        parsed.keyboardRows.flatten().map { it.trim() }.filter { it.isNotBlank() }
+    } else emptyList()
+    if (kbLabels.isNotEmpty()) {
+        localStore.setKeyboard(kbLabels, botId)
+        done.add("кнопок клавиатуры: ${kbLabels.size}")
+        val rulesNow = repository.botRules(botId)
+        val listingsOn = localStore.listingsOn(botId)
+        val noAction = kbLabels.filter { label ->
+            // Кнопки визарда («Разместить объявление», «Мои объявления»,
+            // «Отмена») действие имеют — их ведёт режим «Объявления».
+            if (listingsOn && ListingEngine.looksLikeTrigger(label)) return@filter false
+            rulesNow.none { r ->
+                r.enabled && r.pattern.isNotBlank() &&
+                    (r.pattern.equals(label, ignoreCase = true) ||
+                        label.contains(r.pattern, ignoreCase = true))
+            }
+        }
+        if (noAction.isNotEmpty()) {
+            done.add("без действия: ${noAction.size}")
+            DeviceLlm.log("⚠️ Кнопки клавиатуры без действия: ${noAction.joinToString(", ")}")
         }
     }
 
@@ -374,6 +394,13 @@ private suspend fun applyParsed(
 
     val totalButtons = ruleButtons + schedButtons
     if (totalButtons > 0) done.add("кнопок: $totalButtons")
+    else if (parsed.keyboardRows.isEmpty()) {
+        // В скрипте нет ни inline-меню, ни клавиатуры чата — говорим прямо,
+        // иначе «Выбирай кнопки ниже» остаётся без кнопок.
+        done.add("кнопок в скрипте нет")
+        DeviceLlm.log("ℹ️ В скрипте не найдено кнопок (ни inline-меню, ни клавиатуры чата). " +
+            "Задай их в «Правила ответов» (меню сообщения) или включи режим «Объявления».")
+    }
 
     return if (done.isEmpty()) "Нечего применять — отметь хотя бы одну категорию"
     else done.joinToString(", ")

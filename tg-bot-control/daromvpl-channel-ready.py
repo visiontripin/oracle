@@ -25,6 +25,10 @@ MAX_HISTORY = 4
 ANSWER_COOLDOWN = 10
 DEFAULT_TYPING_SECONDS = 3
 
+# ---------- канал и режим «Объявления» ----------
+CHANNEL_ID = "@daromvpl"   # куда публиковать готовые объявления
+LISTINGS_ON = True         # визард: описание → контакт → фото → предпросмотр → пост
+
 payload = {
     "temperature": 0.7,
     "max_tokens": LLM_MAX_TOKENS,
@@ -63,6 +67,16 @@ def cmd_rules(msg):
         "\n"
         "Берущим: писать автору в личку, без торга — здесь всё даром."
     )
+
+# ---------- клавиатура чата (постоянные кнопки под полем ввода) ----------
+# Импортёр забирает эти кнопки в «Клавиатура чата»; в режиме «Объявления»
+# они запускают визард: новая вещь / мои объявления / отмена.
+def main_menu():
+    kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    kb.row(types.KeyboardButton("📝 Разместить объявление"))
+    kb.row(types.KeyboardButton("📋 Мои объявления"), types.KeyboardButton("❌ Отмена"))
+    return kb
+
 
 # ---------- уточняющие вопросы (вне визарда) ----------
 CLARIFY_QUESTIONS = [

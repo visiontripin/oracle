@@ -303,6 +303,30 @@ class LocalBotService : Service() {
                 text = text, photoId = msg.photoId, replyKeyboard = keyboard,
             )
             if (consumed) return
+        } else if (ListingEngine.looksLikeNew(text) || ListingEngine.looksLikeMy(text)) {
+            // Режим «Объявления» выключен, а человек явно просит объявление
+            // («добавить объявление», /new, «мои объявления») и своего
+            // правила на этот текст нет. Раньше приходил случайный вопрос
+            // из набора — непонятно и не помогало. Свои правила в приоритете.
+            val hasRule = app.repository.botRules(botId).any { r ->
+                r.enabled && r.pattern.isNotBlank() && (
+                    (r.type == "button" && r.pattern.equals(text, ignoreCase = true)) ||
+                        text.contains(r.pattern, ignoreCase = true)
+                    )
+            }
+            if (!hasRule) {
+                DeviceLlm.log("📩 Сообщение: '${text.take(80)}'")
+                DeviceLlm.log("   • Похоже на запрос объявлений, но режим «Объявления» выключен")
+                api.sendMessage(
+                    msg.chatId,
+                    "📝 Режим «Объявления» выключен — пошаговое размещение не запущено.\n\n" +
+                        "Включи: «Настройки бота» → «Объявления: вкл» и укажи канал " +
+                        "(например @daromvpl). После этого «добавить объявление» запустит " +
+                        "визард: описание → контакт → фото → предпросмотр → пост в канал.",
+                    keyboard = keyboard,
+                )
+                return
+            }
         }
 
         // Решение принимает общий «мозг» (тот же, что во вкладке имитации).
@@ -379,6 +403,34 @@ class LocalBotService : Service() {
         }
         DeviceLlm.log("🔘 Кнопка «${btn.label}» (${btn.action})")
         api.answerCallbackQuery(cb.callbackId, btn.toast)
+
+        // Inline-кнопка с «объявительной» надписью (своя, из импорта или
+        // созданная вручную) запускает визард объявлений, даже если её
+        // callback_data не из движка (lst_*). Иначе такая кнопка отвечает
+        // только своей надписью и выглядит «заготовленной».
+        if (store.listingsOn(botId)) {
+            val kb = store.keyboard(botId)
+            when {
+                ListingEngine.looksLikeMy(btn.label) -> {
+                    ListingEngine.showMyListings(
+                        context = this, store = store, api = api, botId = botId,
+                        chatId = cb.chatId, replyKeyboard = kb,
+                    )
+                    return
+                }
+                ListingEngine.looksLikeCancel(btn.label) -> {
+                    ListingEngine.cancelWizard(api = api, botId = botId, chatId = cb.chatId, replyKeyboard = kb)
+                    return
+                }
+                ListingEngine.looksLikeNew(btn.label) -> {
+                    ListingEngine.startWizard(
+                        context = this, store = store, api = api, botId = botId,
+                        chatId = cb.chatId, replyKeyboard = kb,
+                    )
+                    return
+                }
+            }
+        }
 
         val menu = hit?.second ?: listOf(btn)
         when (btn.action) {
