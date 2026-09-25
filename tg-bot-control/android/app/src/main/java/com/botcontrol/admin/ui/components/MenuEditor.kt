@@ -6,6 +6,10 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.Checkbox
@@ -22,13 +26,16 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.botcontrol.admin.data.Anim
+import com.botcontrol.admin.data.AnimSpec
 import com.botcontrol.admin.data.InlineBtn
 import com.botcontrol.admin.data.ReplyPack
 import java.util.UUID
 
 /**
  * Редактор inline-меню сообщения (до 3 кнопок): надпись, всплывашка,
- * действие (текст / случайное из набора / вкл-выкл напоминаний / скрипт).
+ * действие (текст / случайное из набора / вкл-выкл напоминаний / скрипт /
+ * анимация правкой сообщения / кубик).
  */
 @Composable
 fun MenuEditor(
@@ -87,6 +94,8 @@ private fun actionLabel(btn: InlineBtn, packs: List<ReplyPack>): String {
         "reminders_on" -> "→ включить напоминания"
         "reminders_off" -> "→ выключить напоминания"
         "script" -> "→ скрипт JS"
+        "anim" -> "→ 🎞 " + Anim.describe(Anim.decode(btn.script))
+        "dice" -> "→ кубик ${btn.text.ifBlank { "🎲" }}"
         "url" -> "→ ссылка: ${btn.url.take(30)}"
         else -> "→ текст: ${btn.text.take(30)}"
     }
@@ -109,17 +118,22 @@ private fun MenuButtonDialog(
     var action by remember { mutableStateOf(initial.action) }
     var packId by remember { mutableStateOf(initial.packId) }
     var text by remember { mutableStateOf(initial.text) }
-    var script by remember { mutableStateOf(initial.script) }
+    var script by remember { mutableStateOf(if (initial.action == "anim") "" else initial.script) }
     var url by remember { mutableStateOf(initial.url) }
     var edit by remember { mutableStateOf(initial.edit) }
     var row by remember { mutableStateOf(if (initial.row > 0) initial.row else 1) }
     var toastSame by remember { mutableStateOf(initial.toastNoChange) }
+    var animSpec by remember {
+        mutableStateOf(if (initial.action == "anim") Anim.decode(initial.script)
+            else AnimSpec(preset = "spinner", text = "Загрузка", intervalMs = 600))
+    }
+    var dice by remember { mutableStateOf(if (initial.action == "dice") initial.text.ifBlank { "🎲" } else "🎲") }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Кнопка") },
         text = {
-            Column {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
                 OutlinedTextField(label, { label = it },
                     label = { Text("Надпись на кнопке") },
                     singleLine = true, modifier = Modifier.fillMaxWidth())
@@ -130,7 +144,7 @@ private fun MenuButtonDialog(
                 Spacer(Modifier.height(8.dp))
                 DropdownField(
                     value = action,
-                    options = listOf("text", "pack", "url", "reminders_on", "reminders_off", "script"),
+                    options = listOf("text", "pack", "anim", "dice", "url", "reminders_on", "reminders_off", "script"),
                     label = "Что сделать",
                     display = {
                         when (it) {
@@ -139,6 +153,8 @@ private fun MenuButtonDialog(
                             "reminders_on" -> "Включить напоминания"
                             "reminders_off" -> "Выключить напоминания"
                             "script" -> "Скрипт JS"
+                            "anim" -> "🎞 Анимация (правка сообщения)"
+                            "dice" -> "🎲 Кубик / дартс / слот"
                             else -> "Ответить текстом"
                         }
                     },
@@ -164,6 +180,12 @@ private fun MenuButtonDialog(
                         label = { Text("JS: function handle(e) { … return \"ответ\" }") },
                         textStyle = MaterialTheme.typography.bodySmall,
                         modifier = Modifier.fillMaxWidth().height(190.dp))
+                    "anim" -> AnimEditor(spec = animSpec, packs = packs, onChange = { animSpec = it })
+                    "dice" -> Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Anim.DICE.forEach { d ->
+                            FilterChip(selected = dice == d, onClick = { dice = d }, label = { Text(d) })
+                        }
+                    }
                     "url" -> {
                         OutlinedTextField(url, { url = it },
                             label = { Text("Ссылка") },
@@ -185,10 +207,11 @@ private fun MenuButtonDialog(
                         label = { Text("Ответ бота") },
                         modifier = Modifier.fillMaxWidth().height(90.dp))
                 }
-                if (action == "text" || action == "pack") {
+                if (action == "text" || action == "pack" || action == "anim") {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Checkbox(checked = edit, onCheckedChange = { edit = it })
-                        Text("Править это сообщение (не присылать новое)",
+                        Text(if (action == "anim") "Анимировать это же сообщение (кнопки останутся)"
+                            else "Править это сообщение (не присылать новое)",
                             style = MaterialTheme.typography.bodySmall)
                     }
                 }
@@ -206,7 +229,9 @@ private fun MenuButtonDialog(
             val resolvedPack = packId.ifBlank { packs.firstOrNull()?.id.orEmpty() }
             TextButton(
                 onClick = { onSave(InlineBtn(action = action, label = label.trim(), toast = toast,
-                    packId = resolvedPack, text = text, script = script,
+                    packId = if (action == "pack") resolvedPack else "",
+                    text = if (action == "dice") dice else text,
+                    script = if (action == "anim") Anim.encode(animSpec) else script,
                     url = if (action == "url") url.trim() else "", edit = edit, row = row,
                     toastNoChange = if (action.startsWith("reminders")) toastSame.trim() else "")) },
                 enabled = label.isNotBlank() && when (action) {
@@ -214,6 +239,7 @@ private fun MenuButtonDialog(
                     "text" -> text.isNotBlank()
                     "script" -> script.isNotBlank()
                     "url" -> url.trim().startsWith("http") || url.trim().startsWith("tg://")
+                    "anim" -> animSpec.preset != "custom" || animSpec.frames.isNotEmpty()
                     else -> true
                 },
             ) { Text("Сохранить") }

@@ -1331,8 +1331,15 @@ private class Parser(source: String) {
             "settings" -> "Настройки"
             "cancel" -> "Отмена"
             "stop" -> "Остановить"
-            else -> rules.firstOrNull { it.pattern == "/$cmd" }?.text?.lineSequence()
-                ?.firstOrNull { it.isNotBlank() }?.trim()?.take(40)?.ifBlank { null } ?: "/$cmd"
+            else -> {
+                val r = rules.firstOrNull { it.pattern == "/$cmd" }
+                when (r?.actionType) {
+                    "anim" -> Anim.decode(r.script).preset.let { if (it == "custom") "🎞 Анимация" else Anim.preset(it).title }
+                    "dice" -> "Бросить ${r.text.ifBlank { "🎲" }}"
+                    else -> r?.text?.lineSequence()
+                        ?.firstOrNull { it.isNotBlank() }?.trim()?.take(40)?.ifBlank { null } ?: "/$cmd"
+                }
+            }
         }
 
     private fun channelSetting(): String? {

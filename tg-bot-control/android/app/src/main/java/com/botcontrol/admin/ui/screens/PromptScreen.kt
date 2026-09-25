@@ -48,7 +48,7 @@ object BotPrompt {
 СТРУКТУРА (порядок):
 # Название бота
 BOT_TOKEN = "НЕ_ИМПОРТИРУЕТСЯ"
-SYSTEM_PROMPT = ( "строка 1" "строка 2" )      # характер для сценариев ИИ, перенос строки как \n
+SYSTEM_PROMPT = ( "строка 1" "строка 2" )      # ТОЛЬКО если нужен сценарий ИИ; перенос строки как \n
 LLM_MAX_TOKENS = 80
 MAX_HISTORY = 4
 ANSWER_COOLDOWN = 10
@@ -116,6 +116,21 @@ def btn_joke(msg):
 8. ЗАРЕЗЕРВИРОВАНО (не занимать): BOT_TOKEN, SYSTEM_PROMPT, LLM_MAX_TOKENS, LLM_MAX_TOP_K, MAX_HISTORY, ANSWER_COOLDOWN, DEFAULT_TYPING_SECONDS, schedule, commands, content_types, messages, history, days, buttons, menu, items, payload, choices, keyboards, get_today_schedule, cmd_*.
    Свои наборы называй иначе: MORNING_PHRASES, FAQ_ANSWERS, THANK_YOU_LINES.
 9. ЗАПРЕЩЕНО: f-строки с выражениями, import, requests/asyncio/os, регулярки, вложенные списки/словари, HTML/markdown.
+10. ФИШКИ — АНИМАЦИЯ правкой ОДНОГО сообщения (заставки, прогресс-бар, спиннер, флипбук, текстовый квест). Объяви помощника ровно так и вызывай его:
+def play_animation(chat_id, frames, delay=0.7, final=None, reply_markup=None, message_id=None, **kw):
+    m_id = message_id or bot.send_message(chat_id, frames[0]).message_id
+    for frame in frames[1:]:
+        time.sleep(delay)
+        bot.edit_message_text(frame, chat_id, m_id)
+    if final:
+        bot.edit_message_text(final, chat_id, m_id, reply_markup=reply_markup)
+ANIM_ROCKET = [ "  🚀\n\n🌍", "\n  🚀\n🌍", "\n\n🌍🔥" ]      # свои кадры: имя ANIM_* , 2–60 кадров
+   • свои кадры: play_animation(msg.chat.id, ANIM_ROCKET, 0.5, "🛰 На орбите!", mono=True) — mono=True для ASCII-арта;
+   • готовый эффект строкой: play_animation(msg.chat.id, "progress", 0.6, "✅ Готово", text="Загрузка"). Эффекты: spinner, progress, dots, countdown, typewriter, matrix, slot, moon, clock, heart;
+   • итог из набора: play_animation(chat_id, "slot", 0.5, pack=PREDICTIONS); повторы: loops=2;
+   • в обработчике кнопки: message_id=call.message.message_id — анимируется само сообщение с кнопками;
+   • delay — от 0.5 до 3 секунд (Telegram не любит частые правки); итог и кнопки — в final и reply_markup.
+11. КУБИКИ Telegram (анимированный случайный результат): bot.send_dice(msg.chat.id, emoji="🎲") — годятся 🎲 🎯 🏀 ⚽ 🎳 🎰; можно и в ветке кнопки.
 
 ЗАДАНИЕ: создай бота:"""
 

@@ -27,6 +27,11 @@ fun main() {
     if (back != spec) { println(spec); println(back) }
     check("decode мусора → по умолчанию", Anim.decode("какой-то JS") == AnimSpec())
     check("splitFrames", Anim.splitFrames("a\nb\n---\nc\n---\n\n") == listOf("a\nb", "c"))
+    val lead = listOf("   🚀\n\n🌍", "\n   🚀\n🌍", "\n\n🌍🔥")
+    check("пустые строки в начале кадра сохраняются", Anim.splitFrames(Anim.joinFrames(lead)) == lead)
+    check("encode→decode кадров с ведущими переносами",
+        Anim.decode(Anim.encode(AnimSpec(preset = "custom", frames = lead))).frames == lead)
+    check("keepLayout: ⠀ перед ведущим переносом", Anim.keepLayout("\nx") == "\u2800\nx" && Anim.keepLayout("x") == "x")
     val slot = AnimSpec(preset = "slot", packId = "p")
     check("слот: итог из набора", Anim.final(slot, "", listOf("ДЖЕКПОТ")) == "ДЖЕКПОТ")
     check("отсчёт: итог по умолчанию 🚀", Anim.final(AnimSpec(preset = "countdown")) == "🚀")

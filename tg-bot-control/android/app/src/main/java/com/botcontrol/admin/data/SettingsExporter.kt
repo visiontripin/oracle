@@ -284,7 +284,9 @@ object SettingsExporter {
 
         // ---------- наборы ответов ----------
         packs.forEach { pack ->
-            sb.appendLine("${consts[pack.id]} = [")
+            // «# Название» на строке объявления — импорт вернёт название набора
+            val title = pack.name.replace(Regex("[\r\n]+"), " ").trim()
+            sb.appendLine("${consts[pack.id]} = [" + if (title.isNotBlank()) "  # $title" else "")
             pack.items.take(300).forEach { item -> sb.appendLine("    ${py(item)},") }
             sb.appendLine("]")
             sb.appendLine()

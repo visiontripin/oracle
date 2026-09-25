@@ -44,6 +44,9 @@ private data class SimResult(
     val reply: String,
     val menu: List<String>,
     val trace: List<String>,
+    val anim: com.botcontrol.admin.data.AnimSpec? = null,
+    val animPack: List<String> = emptyList(),
+    val dice: String = "",
 )
 
 /**
@@ -105,12 +108,18 @@ fun SimulateScreen(
                                 respectCooldown = false,
                                 trace = { trace.add(it) },
                             )
+                            val animPack = decision.anim?.packId?.takeIf { it.isNotBlank() }?.let { id ->
+                                localStore.packs().firstOrNull { it.id == id }?.items
+                            }.orEmpty()
                             results.add(0, SimResult(
                                 input = message,
                                 source = decision.source,
                                 reply = decision.reply,
                                 menu = decision.menu.map { it.label },
                                 trace = trace.toList(),
+                                anim = decision.anim,
+                                animPack = animPack,
+                                dice = decision.dice,
                             ))
                         } finally {
                             running = false
@@ -139,8 +148,15 @@ fun SimulateScreen(
                             style = MaterialTheme.typography.labelLarge,
                             color = MaterialTheme.colorScheme.primary)
                         Spacer(Modifier.height(4.dp))
-                        Text(res.reply.ifBlank { "(промолчал — кулдаун)" },
-                            style = MaterialTheme.typography.bodyMedium)
+                        when {
+                            res.anim != null ->
+                                com.botcontrol.admin.ui.components.AnimPreview(res.anim, res.animPack)
+                            res.dice.isNotBlank() ->
+                                Text("${res.dice}  (кубик Telegram: результат случайный)",
+                                    style = MaterialTheme.typography.bodyMedium)
+                            else -> Text(res.reply.ifBlank { "(промолчал — кулдаун)" },
+                                style = MaterialTheme.typography.bodyMedium)
+                        }
                         if (res.menu.isNotEmpty()) {
                             Spacer(Modifier.height(4.dp))
                             Text("Кнопки: ${res.menu.joinToString(" | ")}",

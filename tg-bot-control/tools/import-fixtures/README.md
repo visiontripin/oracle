@@ -47,3 +47,32 @@ start/stop/smoke-ветками и 4-м элементом кортежа (ме�
 Формулировки правок от пользователя (что было сломано: команды, правила,
 кнопки, имитация набора). Хранить как контекст, чтобы не возвращать
 исправленные баги.
+
+## `export-bot2-smith.py` (v1.6.0)
+
+Экспорт бота №2 из приложения в том виде, как его прислал пользователь
+(с `&lt;`, порванными строками и без обработчика нажатий). Ожидаемо:
+start/stop → вкл/выкл напоминаний (с «ℹ️»-замечанием), ПЕРЕКУР —
+будни, Пт 15:55 отдельно, Пн–Чт 15:55/16:55.
+
+## `anim-demo-bot.py` (v1.6.0)
+
+Анимации и кубики: `/start` → шаблон matrix + 4 кнопки (слот с итогом
+из набора `pack=PREDICTIONS` и `message_id=` → правка на месте, кубик,
+прогресс ×2, квест моноширинный), `/rocket` — свои кадры с ведущими
+переносами, `/countdown` — цикл правок прямо в обработчике, `/dart` — 🎯.
+Наборов — 1 (списки-кадры в наборы не попадают).
+
+## Круговой тест «код → импорт → экспорт → импорт» (v1.6.0)
+
+```bash
+cd ../kotlin-harness
+SRC=../../android/app/src/main/java/com/botcontrol/admin/data
+./kc.sh out $SRC/PySource.kt $SRC/ScriptImporter.kt $SRC/BotExtras.kt $SRC/Anim.kt \
+  $SRC/SettingsExporter.kt stubs/*.kt stubs2/*.kt src/Dump.kt src/RoundTrip.kt src/AnimTest.kt
+for f in ../import-fixtures/*.py ../../smith-bot-ready.py; do
+  ./run.sh out RoundTripKt $f /tmp/rt.py 2>&1 | tail -1   # ждём ROUNDTRIP OK
+  python3 -c "import ast; ast.parse(open('/tmp/rt.py').read())"
+done
+./run.sh out AnimTestKt | tail -1                          # ждём ALL OK
+```

@@ -170,6 +170,10 @@ fun LocalBotScreen(
                         val actionLabel = when (rule.actionType) {
                             "script" -> "⚙️ скрипт JS"
                             "llm" -> "🤖 отвечает ИИ"
+                            "pack" -> "🎲 случайное из набора"
+                            "anim" -> "🎞 анимация: " + com.botcontrol.admin.data.Anim.describe(
+                                com.botcontrol.admin.data.Anim.decode(rule.script))
+                            "dice" -> "🎲 кубик ${rule.responseText.ifBlank { "🎲" }}"
                             else -> "Ответ: ${rule.responseText.take(50)}"
                         }
                         Text(actionLabel, style = MaterialTheme.typography.bodySmall)
@@ -312,6 +316,15 @@ fun LocalBotScreen(
         var pattern by remember { mutableStateOf(initial?.pattern ?: "") }
         var response by remember { mutableStateOf(initial?.responseText ?: "") }
         var packId by remember { mutableStateOf(initial?.packId ?: "") }
+        var animSpec by remember {
+            mutableStateOf(
+                if (initial?.actionType == "anim") com.botcontrol.admin.data.Anim.decode(initial?.script.orEmpty())
+                else com.botcontrol.admin.data.AnimSpec(preset = "progress", text = "Подготовка", intervalMs = 600)
+            )
+        }
+        var dice by remember {
+            mutableStateOf(if (initial?.actionType == "dice") initial?.responseText.orEmpty().ifBlank { "🎲" } else "🎲")
+        }
         var ruleMenu by remember {
             mutableStateOf(com.botcontrol.admin.data.BotJson.menu(initial?.menu.orEmpty()))
         }
@@ -343,12 +356,18 @@ fun LocalBotScreen(
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         FilterChip(selected = action == "text",
                             onClick = { action = "text" }, label = { Text("Текст") })
-                        FilterChip(selected = action == "script",
-                            onClick = { action = "script" }, label = { Text("Скрипт JS") })
-                        FilterChip(selected = action == "llm",
-                            onClick = { action = "llm" }, label = { Text("ИИ") })
                         FilterChip(selected = action == "pack",
                             onClick = { action = "pack" }, label = { Text("Набор") })
+                        FilterChip(selected = action == "script",
+                            onClick = { action = "script" }, label = { Text("Скрипт JS") })
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        FilterChip(selected = action == "anim",
+                            onClick = { action = "anim" }, label = { Text("🎞 Анимация") })
+                        FilterChip(selected = action == "dice",
+                            onClick = { action = "dice" }, label = { Text("🎲 Кубик") })
+                        FilterChip(selected = action == "llm",
+                            onClick = { action = "llm" }, label = { Text("ИИ") })
                     }
                     Spacer(Modifier.height(8.dp))
                     if (action == "text") {
@@ -371,6 +390,21 @@ fun LocalBotScreen(
                             },
                             onSelect = { packId = it },
                         )
+                    } else if (action == "anim") {
+                        Text("Бот пришлёт сообщение и будет править его кадр за кадром " +
+                            "(0,5–3 с на кадр), в конце — итог и кнопки ниже.",
+                            style = MaterialTheme.typography.bodySmall)
+                        Spacer(Modifier.height(6.dp))
+                        com.botcontrol.admin.ui.components.AnimEditor(
+                            spec = animSpec, packs = packs, onChange = { animSpec = it })
+                    } else if (action == "dice") {
+                        Text("Telegram покажет анимированный эмодзи со случайным результатом.",
+                            style = MaterialTheme.typography.bodySmall)
+                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            com.botcontrol.admin.data.Anim.DICE.forEach { d ->
+                                FilterChip(selected = dice == d, onClick = { dice = d }, label = { Text(d) })
+                            }
+                        }
                     } else {
                         Text("Ответ сгенерирует локальный ИИ (вкладка «Модели ИИ»).",
                             style = MaterialTheme.typography.bodySmall)
@@ -394,9 +428,16 @@ fun LocalBotScreen(
                                     botId = initial?.botId ?: localStore.activeBotId(),
                                     enabled = initial?.enabled ?: true,
                                     type = type, pattern = pattern.trim(),
-                                    responseText = if (action == "text") response else "",
+                                    responseText = when (action) {
+                                        "text" -> response
+                                        "dice" -> dice
+                                        else -> ""
+                                    },
                                     actionType = action,
-                                    packId = if (action == "pack") packId else "",
+                                    packId = if (action == "pack") packId.ifBlank { packs.firstOrNull()?.id.orEmpty() } else "",
+                                    // JS-код скрипта не теряем при правке правила; анимация — спецификация
+                                    script = if (action == "anim") com.botcontrol.admin.data.Anim.encode(animSpec)
+                                        else if (initial?.actionType == "anim") "" else initial?.script.orEmpty(),
                                     menu = com.botcontrol.admin.data.BotJson.save(ruleMenu),
                                 )
                             )
@@ -406,7 +447,12 @@ fun LocalBotScreen(
                             if (action == "script" && initial == null) onOpenScript(id.toInt())
                         }
                     },
-                    enabled = pattern.isNotBlank() && (action != "text" || response.isNotBlank()),
+                    enabled = pattern.isNotBlank() && when (action) {
+                        "text" -> response.isNotBlank()
+                        "anim" -> animSpec.preset != "custom" || animSpec.frames.isNotEmpty()
+                        "pack" -> packId.isNotBlank() || packs.isNotEmpty()
+                        else -> true
+                    },
                 ) { Text(if (initial == null) "Добавить" else "Сохранить") }
             },
             dismissButton = {
