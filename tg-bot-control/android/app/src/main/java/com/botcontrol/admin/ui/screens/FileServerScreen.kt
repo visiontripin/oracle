@@ -1,5 +1,7 @@
 package com.botcontrol.admin.ui.screens
 
+import com.botcontrol.admin.ui.components.ConfirmRequest
+import com.botcontrol.admin.ui.components.ConfirmHost
 import android.net.Uri
 import android.provider.OpenableColumns
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -48,6 +50,8 @@ fun FileServerScreen(
     localStore: LocalBotStore,
     onBack: () -> Unit,
 ) {
+    val confirm = remember { mutableStateOf<ConfirmRequest?>(null) }
+    ConfirmHost(confirm)
     val context = LocalContext.current
     val clipboard = LocalClipboardManager.current
     var running by remember { mutableStateOf(false) }
@@ -234,11 +238,11 @@ fun FileServerScreen(
                             message = "❌ Файл большой или не текстовый — скопируй через сервер"
                         }
                     }) { Text("📋") }
-                    TextButton(onClick = {
+                    TextButton(onClick = { confirm.value = ConfirmRequest("Удалить файл?", f.name) {
                         f.delete()
                         refresh()
                         message = "🗑 Удалено: ${f.name}"
-                    }) { Text("🗑") }
+                    } }) { Text("🗑") }
                 }
             }
         }

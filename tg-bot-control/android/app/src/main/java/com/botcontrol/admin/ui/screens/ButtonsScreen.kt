@@ -1,5 +1,7 @@
 package com.botcontrol.admin.ui.screens
 
+import com.botcontrol.admin.ui.components.ConfirmRequest
+import com.botcontrol.admin.ui.components.ConfirmHost
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -44,6 +46,8 @@ import kotlinx.coroutines.launch
  */
 @Composable
 fun ButtonsScreen(localStore: LocalBotStore, repository: BotRepository, onBack: () -> Unit) {
+    val confirm = remember { mutableStateOf<ConfirmRequest?>(null) }
+    ConfirmHost(confirm)
     val scope = rememberCoroutineScope()
     var botId by remember { mutableStateOf(0L) }
     var keyboard by remember { mutableStateOf<List<String>>(emptyList()) }
@@ -91,13 +95,13 @@ fun ButtonsScreen(localStore: LocalBotStore, repository: BotRepository, onBack: 
                         verticalAlignment = Alignment.CenterVertically) {
                         Text("🔘 $label", Modifier.weight(1f))
                         TextButton(onClick = { editing = label }) { Text("✎") }
-                        TextButton(onClick = {
+                        TextButton(onClick = { confirm.value = ConfirmRequest("Удалить кнопку?", "«$label»") {
                             scope.launch {
                                 localStore.setKeyboard(keyboard - label, botId)
                                 message = "🗑 Удалено (бот $botId)"
                                 load()
                             }
-                        }) { Text("✕") }
+                        } }) { Text("✕") }
                     }
                 }
                 Spacer(Modifier.height(4.dp))

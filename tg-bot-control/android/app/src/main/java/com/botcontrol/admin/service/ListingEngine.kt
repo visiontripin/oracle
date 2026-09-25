@@ -333,7 +333,7 @@ object ListingEngine {
     ) {
         val k = key(botId, chatId)
         val draft = drafts[k]
-        DeviceLlm.log("🔘 Объявления: кнопка '$data' (шаг: ${draft?.state?.name ?: "—"})")
+        BotLog.log(botId, "🔘 Объявления: кнопка '$data' (шаг: ${draft?.state?.name ?: "—"})")
         when {
             data == "lst_cancel" -> {
                 drafts.remove(k)
@@ -395,14 +395,14 @@ object ListingEngine {
                 if (failed.isEmpty()) {
                     store.setListings(all.filterNot { it.id == id }, botId)
                     api.answerCallbackQuery(callbackId, "🗑 Удалено")
-                    DeviceLlm.log("🗑 [$botId] Объявление ${target.id} удалено из канала (сообщ.: $removed)")
+                    BotLog.log(botId, "🗑 Объявление ${target.id} удалено из канала (сообщ.: $removed)")
                     api.editMessageText(chatId, messageId, "🗑 Объявление удалено из канала.\n\nВыбери действие 👇")
                 } else {
                     // Не удалось — объявление остаётся в списке с неудалёнными
                     // сообщениями, чтобы можно было повторить.
                     store.setListings(all.map { if (it.id == id) it.copy(messageIds = failed) else it }, botId)
                     api.answerCallbackQuery(callbackId, "⚠️ Удалено не всё")
-                    DeviceLlm.log("⚠️ [$botId] Объявление ${target.id}: удалено $removed, не удалось ${failed.size}: ${lastError.take(120)}")
+                    BotLog.log(botId, "⚠️ Объявление ${target.id}: удалено $removed, не удалось ${failed.size}: ${lastError.take(120)}")
                     api.editMessageText(chatId, messageId,
                         "⚠️ Удалено сообщений: $removed, не удалось: ${failed.size}.\n" +
                             "Причина: ${lastError.take(120)}\n\n" +
@@ -554,11 +554,11 @@ object ListingEngine {
             for (mid in oldIds) {
                 api.deleteMessage(channel, mid).onFailure { e ->
                     leftover.add(mid)
-                    DeviceLlm.log("⚠️ [$botId] Старый пост $mid не удалён: ${e.message?.take(120)}")
+                    BotLog.log(botId, "⚠️ Старый пост $mid не удалён: ${e.message?.take(120)}")
                 }
             }
             if (oldIds.isNotEmpty()) {
-                DeviceLlm.log("♻️ [$botId] Переопубликация $listingId: убрано старых сообщ. ${oldIds.size - leftover.size} из ${oldIds.size}")
+                BotLog.log(botId, "♻️ Переопубликация $listingId: убрано старых сообщ. ${oldIds.size - leftover.size} из ${oldIds.size}")
             }
         }
         all.removeAll { it.id == listingId }
@@ -576,7 +576,7 @@ object ListingEngine {
             ),
         )
         store.setListings(all, botId)
-        DeviceLlm.log("📦 [$botId] Объявление $listingId опубликовано в $channel (фото: ${media.size})")
+        BotLog.log(botId, "📦 Объявление $listingId опубликовано в $channel (фото: ${media.size})")
 
         api.sendMessage(
             chatId,

@@ -79,11 +79,11 @@ object AnimPlayer {
             return if (spec.mono) "<pre>${Anim.html(s)}</pre>" else s
         }
 
-        DeviceLlm.log("🎞 [$botId] Анимация «${Anim.preset(spec.preset).title}»: кадров ${frames.size}, шаг ${step} мс")
+        BotLog.log(botId, "🎞 Анимация «${Anim.preset(spec.preset).title}»: кадров ${frames.size}, шаг ${step} мс")
 
         suspend fun sendNew(text: String, withMenu: Boolean): Int? =
             api.sendMessageForId(chatId, fmt(text), mode, if (withMenu) menu else emptyList())
-                .onFailure { DeviceLlm.log("❌ [$botId] Анимация: первый кадр не отправлен: ${it.message?.take(160)}") }
+                .onFailure { BotLog.log(botId, "❌ Анимация: первый кадр не отправлен: ${it.message?.take(160)}") }
                 .getOrNull()?.takeIf { it > 0 }
 
         var mid: Int
@@ -102,11 +102,11 @@ object AnimPlayer {
             if (err != null) {
                 // Под кнопкой фото (в нём нет текста) — анимируем новым сообщением.
                 if (i == 0 && editMessageId != null) {
-                    DeviceLlm.log("ℹ️ [$botId] Анимация: сообщение под кнопкой не текстовое — показываю новым сообщением")
+                    BotLog.log(botId, "ℹ️ Анимация: сообщение под кнопкой не текстовое — показываю новым сообщением")
                     mid = sendNew(frames[0], false) ?: return
                     continue
                 }
-                DeviceLlm.log("❌ [$botId] Анимация остановлена: ${err.take(160)}")
+                BotLog.log(botId, "❌ Анимация остановлена: ${err.take(160)}")
                 return
             }
         }
@@ -116,7 +116,7 @@ object AnimPlayer {
             delay(step)
             val err = if (last != null) attempt(botId) { api.editMessageText(chatId, mid, last, menu, null) }
             else attempt(botId) { api.editMessageText(chatId, mid, fmt(frames.last()), menu, mode) }
-            err?.let { DeviceLlm.log("❌ [$botId] Анимация: итог не показан: ${it.take(160)}") }
+            err?.let { BotLog.log(botId, "❌ Анимация: итог не показан: ${it.take(160)}") }
         }
     }
 
@@ -134,7 +134,7 @@ object AnimPlayer {
         val frames = Anim.photoFrames(spec, user)
         if (frames.isEmpty()) return
         val step = Anim.interval(spec)
-        DeviceLlm.log("🖼 [$botId] Фото-анимация: кадров ${frames.size}, шаг ${step} мс")
+        BotLog.log(botId, "🖼 Фото-анимация: кадров ${frames.size}, шаг ${step} мс")
 
         fun resolve(src: String) = fileIds["$botId|$src"] ?: src
         fun remember(src: String, fileId: String) {
@@ -144,7 +144,7 @@ object AnimPlayer {
 
         suspend fun sendFirst(f: Anim.PhotoFrame): Int? {
             val r = api.sendPhotoForId(chatId, resolve(f.src), f.caption, if (onlyOne) menu else emptyList())
-            r.onFailure { DeviceLlm.log("❌ [$botId] Фото-анимация: первый кадр не отправлен: ${it.message?.take(160)}") }
+            r.onFailure { BotLog.log(botId, "❌ Фото-анимация: первый кадр не отправлен: ${it.message?.take(160)}") }
             val (id, fileId) = r.getOrNull() ?: return null
             remember(f.src, fileId)
             return id.takeIf { it > 0 }
@@ -174,12 +174,12 @@ object AnimPlayer {
             if (err != null) {
                 if (i == 0 && editMessageId != null) {
                     // Под кнопкой текстовое сообщение — картинку в него не вставить.
-                    DeviceLlm.log("ℹ️ [$botId] Фото-анимация: сообщение под кнопкой текстовое — показываю новым сообщением")
+                    BotLog.log(botId, "ℹ️ Фото-анимация: сообщение под кнопкой текстовое — показываю новым сообщением")
                     mid = sendFirst(f) ?: return
                     curSrc = f.src
                     continue
                 }
-                DeviceLlm.log("❌ [$botId] Фото-анимация остановлена: ${err.take(160)}")
+                BotLog.log(botId, "❌ Фото-анимация остановлена: ${err.take(160)}")
                 return
             }
             curSrc = f.src
@@ -188,7 +188,7 @@ object AnimPlayer {
         if (!onlyOne && finalText.isNotBlank()) {
             delay(step)
             attempt(botId) { api.editMessageCaption(chatId, m, finalText, menu) }
-                ?.let { DeviceLlm.log("❌ [$botId] Фото-анимация: итог не показан: ${it.take(160)}") }
+                ?.let { BotLog.log(botId, "❌ Фото-анимация: итог не показан: ${it.take(160)}") }
         }
     }
 
@@ -205,7 +205,7 @@ object AnimPlayer {
                 msg.contains("not modified", ignoreCase = true) -> return null
                 msg.contains("HTTP 429") && n == 0 -> {
                     val wait = Regex("retry_after\\D{0,4}(\\d+)").find(msg)?.groupValues?.get(1)?.toLongOrNull() ?: 2L
-                    DeviceLlm.log("⏳ [$botId] Анимация: Telegram просит паузу ${wait} с (слишком частые правки)")
+                    BotLog.log(botId, "⏳ Анимация: Telegram просит паузу ${wait} с (слишком частые правки)")
                     delay(wait.coerceIn(1, 30) * 1000L)
                 }
                 else -> return msg.ifBlank { "ошибка" }

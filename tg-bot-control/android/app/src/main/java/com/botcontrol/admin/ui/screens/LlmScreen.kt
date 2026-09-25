@@ -1,5 +1,7 @@
 package com.botcontrol.admin.ui.screens
 
+import com.botcontrol.admin.ui.components.ConfirmRequest
+import com.botcontrol.admin.ui.components.ConfirmHost
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -45,6 +47,8 @@ private val SCOPES = listOf("all", "command", "chat", "channel")
 
 @Composable
 fun LlmScreen(repository: BotRepository, onDevice: () -> Unit = {}) {
+    val confirm = remember { mutableStateOf<ConfirmRequest?>(null) }
+    ConfirmHost(confirm)
     val scope = rememberCoroutineScope()
 
     var status by remember { mutableStateOf<com.botcontrol.admin.data.remote.LlmStatusDto?>(null) }
@@ -311,13 +315,13 @@ fun LlmScreen(repository: BotRepository, onDevice: () -> Unit = {}) {
                                 .onFailure { error = it.message ?: "Update failed" }
                         }
                     })
-                    TextButton(onClick = {
+                    TextButton(onClick = { confirm.value = ConfirmRequest("Удалить привязку?", "") {
                         scope.launch {
                             repository.llmDeleteBinding(b.id)
                                 .onSuccess { loadAll() }
                                 .onFailure { error = it.message ?: "Delete failed" }
                         }
-                    }) { Text("✕") }
+                    } }) { Text("✕") }
                 }
             }
         }

@@ -1,5 +1,7 @@
 package com.botcontrol.admin.ui.screens
 
+import com.botcontrol.admin.ui.components.ConfirmRequest
+import com.botcontrol.admin.ui.components.ConfirmHost
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -54,6 +56,8 @@ fun OnDeviceScreen(
     localMode: Boolean = false,
     localStore: com.botcontrol.admin.data.LocalBotStore? = null,
 ) {
+    val confirm = remember { mutableStateOf<ConfirmRequest?>(null) }
+    ConfirmHost(confirm)
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val uriHandler = LocalUriHandler.current
@@ -182,11 +186,11 @@ fun OnDeviceScreen(
                         Text("${m.sizeBytes / 1024 / 1024} MiB",
                             style = MaterialTheme.typography.bodySmall)
                     }
-                    TextButton(onClick = {
+                    TextButton(onClick = { confirm.value = ConfirmRequest("Удалить модель?", "${m.name} — файл удалится с телефона, для работы ИИ его придётся скачать заново.") {
                         store.delete(m.name)
                         models = store.list()
                         if (selected == m.name) { selected = ""; selectModel("") }
-                    }) { Text("✕") }
+                    } }) { Text("✕") }
                 }
             }
         }

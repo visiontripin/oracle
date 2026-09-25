@@ -1,5 +1,7 @@
 package com.botcontrol.admin.ui.screens
 
+import com.botcontrol.admin.ui.components.ConfirmRequest
+import com.botcontrol.admin.ui.components.ConfirmHost
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -43,9 +45,16 @@ fun PacksScreen(localStore: LocalBotStore, onBack: () -> Unit, onEditPack: (Stri
     var packs by remember { mutableStateOf<List<ReplyPack>>(emptyList()) }
     var openPackId by remember { mutableStateOf("") }
     var showAddPack by remember { mutableStateOf(false) }
+    var confirmDelete by remember { mutableStateOf<ReplyPack?>(null) }
+    var botNames by remember { mutableStateOf<Map<Long, String>>(emptyMap()) }
 
     fun load() {
-        scope.launch { packs = localStore.packs() }
+        scope.launch {
+            packs = localStore.packs()
+            botNames = localStore.profiles().associate { p ->
+                p.id to (p.username.takeIf { it.isNotBlank() }?.let { "@$it" } ?: p.name)
+            }
+        }
     }
     LaunchedEffect(Unit) { load() }
 
@@ -73,19 +82,16 @@ fun PacksScreen(localStore: LocalBotStore, onBack: () -> Unit, onEditPack: (Stri
                         Column(Modifier.weight(1f)) {
                             Text(pack.name.ifBlank { "Без названия" },
                                 style = MaterialTheme.typography.titleSmall)
-                            Text("ответов: ${pack.items.size}",
+                            val owner = if (pack.ownerBotId == 0L) "общий"
+                                else "бот " + (botNames[pack.ownerBotId] ?: "#${pack.ownerBotId}")
+                            Text("ответов: ${pack.items.size} · $owner",
                                 style = MaterialTheme.typography.bodySmall)
                         }
                         TextButton(onClick = { onEditPack(pack.id) }) { Text("✎ Изменить") }
                         TextButton(onClick = {
                             openPackId = if (isOpen) "" else pack.id
                         }) { Text(if (isOpen) "▲" else "▼") }
-                        TextButton(onClick = {
-                            scope.launch {
-                                localStore.setPacks(localStore.packs().filterNot { it.id == pack.id })
-                                load()
-                            }
-                        }) { Text("✕") }
+                        TextButton(onClick = { confirmDelete = pack }) { Text("✕") }
                     }
                     if (isOpen) {
                         PackItemsEditor(pack = pack, localStore = localStore, onSaved = { load() })
@@ -96,6 +102,26 @@ fun PacksScreen(localStore: LocalBotStore, onBack: () -> Unit, onEditPack: (Stri
         Spacer(Modifier.height(4.dp))
         Button(onClick = { showAddPack = true }, modifier = Modifier.fillMaxWidth()) {
             Text("+ Новый набор")
+        }
+        confirmDelete?.let { victim ->
+            AlertDialog(
+                onDismissRequest = { confirmDelete = null },
+                title = { Text("Удалить набор?") },
+                text = {
+                    Text("«${victim.name.ifBlank { "Без названия" }}» (ответов: ${victim.items.size}). " +
+                        "Правила и кнопки, которые на него ссылаются, перестанут отвечать.")
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        scope.launch {
+                            localStore.setPacks(localStore.packs().filterNot { it.id == victim.id })
+                            confirmDelete = null
+                            load()
+                        }
+                    }) { Text("Удалить") }
+                },
+                dismissButton = { TextButton(onClick = { confirmDelete = null }) { Text("Отмена") } },
+            )
         }
         Spacer(Modifier.height(24.dp))
     }
@@ -136,6 +162,8 @@ private fun PackItemsEditor(
     localStore: LocalBotStore,
     onSaved: () -> Unit,
 ) {
+    val confirm = remember { mutableStateOf<ConfirmRequest?>(null) }
+    ConfirmHost(confirm)
     val scope = rememberCoroutineScope()
     var newItem by remember { mutableStateOf("") }
 
@@ -144,14 +172,14 @@ private fun PackItemsEditor(
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text("${index + 1}. ${item.take(70)}",
                     style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
-                TextButton(onClick = {
+                TextButton(onClick = { confirm.value = ConfirmRequest("Удалить ответ из набора?", item.take(160)) {
                     scope.launch {
                         localStore.setPacks(localStore.packs().map {
                             if (it.id == pack.id) it.copy(items = it.items - item) else it
                         })
                         onSaved()
                     }
-                }) { Text("✕") }
+                } }) { Text("✕") }
             }
         }
         Spacer(Modifier.height(4.dp))

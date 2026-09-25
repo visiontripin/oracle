@@ -37,6 +37,7 @@ import com.botcontrol.admin.data.BotJson
 import com.botcontrol.admin.data.BotRepository
 import com.botcontrol.admin.data.InlineBtn
 import com.botcontrol.admin.data.LocalBotStore
+import com.botcontrol.admin.data.ReplyPack
 import com.botcontrol.admin.data.ScriptImporter
 import com.botcontrol.admin.service.ListingEngine
 import com.botcontrol.admin.data.local.BotRuleEntity
@@ -227,13 +228,26 @@ private suspend fun applyParsed(
     val packIdMap = HashMap<String, String>() // imp_XXX -> реальный id набора
     if (parsed.packs.isNotEmpty() && wanted(ScriptImporter.SEC_PACKS)) {
         val current = localStore.packs().toMutableList()
+        // Изоляция ботов: обновляем только СВОИ наборы. Раньше набор искался
+        // лишь по названию — импорт в бота B перезаписывал одноимённый набор
+        // бота A. Старый общий набор (ownerBotId = 0) «забираем», только если
+        // на него не ссылаются правила/расписание других ботов.
+        val foreign = foreignPackRefs(localStore, repository, botId)
+        fun mine(p: ReplyPack) =
+            p.ownerBotId == botId || (p.ownerBotId == 0L && !foreign.contains(p.id))
         for (imported in parsed.packs) {
-            val existing = current.firstOrNull { it.name == imported.name }
+            val existing = current.firstOrNull { it.name == imported.name && mine(it) }
             if (existing != null) {
-                current[current.indexOf(existing)] = existing.copy(items = imported.items)
+                current[current.indexOf(existing)] =
+                    existing.copy(items = imported.items, ownerBotId = botId)
                 packIdMap[imported.id] = existing.id
             } else {
-                val fresh = imported.copy(id = newPackId(imported.id))
+                // id уникален во всей библиотеке: «pack_fortunes» у двух ботов
+                // иначе совпадал, и бот B отвечал фразами бота A.
+                val fresh = imported.copy(
+                    id = uniquePackId(newPackId(imported.id), current.map { it.id }.toSet()),
+                    ownerBotId = botId,
+                )
                 current.add(fresh)
                 packIdMap[imported.id] = fresh.id
             }
@@ -422,6 +436,29 @@ private suspend fun applyParsed(
 
     return if (done.isEmpty()) "Нечего применять — отметь хотя бы одну категорию"
     else done.joinToString(", ")
+}
+
+/** Всё, чем другие боты ссылаются на наборы (правила, кнопки, анимации, расписание). */
+private suspend fun foreignPackRefs(
+    store: LocalBotStore,
+    repository: BotRepository,
+    botId: Long,
+): String {
+    val gson = com.google.gson.Gson()
+    val sb = StringBuilder()
+    for (p in store.profiles()) {
+        if (p.id == botId) continue
+        sb.append(gson.toJson(repository.botRules(p.id)))
+        sb.append(gson.toJson(store.schedule(p.id)))
+    }
+    return sb.toString()
+}
+
+private fun uniquePackId(base: String, taken: Set<String>): String {
+    if (base !in taken) return base
+    var i = 2
+    while ("${base}_$i" in taken) i++
+    return "${base}_$i"
 }
 
 private fun newPackId(imported: String): String {

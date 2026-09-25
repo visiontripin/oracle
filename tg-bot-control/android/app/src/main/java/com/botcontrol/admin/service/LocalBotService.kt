@@ -182,7 +182,7 @@ class LocalBotService : Service() {
             if (states.value[botId]?.running != true) return
         }
         setState(botId) { it.copy(botUsername = botName, running = true, lastError = "") }
-        DeviceLlm.log("🚀 Бот @$botName запущен (правил: ${runCatching { app.repository.botRules(botId).size }.getOrDefault(-1)})")
+        BotLog.log(botId, "🚀 Бот запущен (правил: ${runCatching { app.repository.botRules(botId).size }.getOrDefault(-1)})")
         refreshNotification()
 
         // Главное меню Telegram (кнопка «Меню») — применяем сохранённый список.
@@ -190,11 +190,11 @@ class LocalBotService : Service() {
         if (menuCommands.isNotEmpty()) {
             api.setMyCommands(menuCommands.map { it.command to it.description })
                 .onSuccess {
-                    DeviceLlm.log("📜 [$botName] Главное меню применено (${menuCommands.size} команд)")
+                    BotLog.log(botId, "📜 Главное меню применено (${menuCommands.size} команд)")
                     resolveProblem(botId, "menu")
                 }
                 .onFailure { e ->
-                    DeviceLlm.log("⚠️ [$botName] Меню не применено: ${e.message?.take(160)}")
+                    BotLog.log(botId, "⚠️ Меню не применено: ${e.message?.take(160)}")
                     addProblem(botId, "menu", "Меню Telegram: ${e.message?.take(140)}")
                 }
         }
@@ -305,8 +305,8 @@ class LocalBotService : Service() {
             if (consumed) {
                 // Раньше эти сообщения не попадали в журнал — не было видно,
                 // что визард вообще сработал.
-                DeviceLlm.log("📩 Сообщение: '${text.take(80)}'")
-                DeviceLlm.log("   • Обработал режим «Объявления»")
+                BotLog.log(botId, "📩 Сообщение: '${text.take(80)}'")
+                BotLog.log(botId, "   • Обработал режим «Объявления»")
                 return
             }
         } else if (ListingEngine.looksLikeNew(text) || ListingEngine.looksLikeMy(text)) {
@@ -321,8 +321,8 @@ class LocalBotService : Service() {
                     )
             }
             if (!hasRule) {
-                DeviceLlm.log("📩 Сообщение: '${text.take(80)}'")
-                DeviceLlm.log("   • Похоже на запрос объявлений, но режим «Объявления» выключен")
+                BotLog.log(botId, "📩 Сообщение: '${text.take(80)}'")
+                BotLog.log(botId, "   • Похоже на запрос объявлений, но режим «Объявления» выключен")
                 api.sendMessage(
                     msg.chatId,
                     "📝 Режим «Объявления» выключен — пошаговое размещение не запущено.\n\n" +
@@ -336,7 +336,7 @@ class LocalBotService : Service() {
         }
 
         // Решение принимает общий «мозг» (тот же, что во вкладке имитации).
-        DeviceLlm.log("📩 Сообщение: '${text.take(80)}'")
+        BotLog.log(botId, "📩 Сообщение: '${text.take(80)}'")
         val decision = BotBrain.decide(
             context = this,
             store = store,
@@ -346,9 +346,9 @@ class LocalBotService : Service() {
             text = text,
             respectCooldown = true,
             onLlmStart = { api.sendChatAction(msg.chatId) },
-            trace = { DeviceLlm.log("   • $it") },
+            trace = { BotLog.log(botId, "   • $it") },
         )
-        DeviceLlm.log("💬 Источник: ${decision.source}; ответ: '${decision.reply.take(60)}'")
+        BotLog.log(botId, "💬 Источник: ${decision.source}; ответ: '${decision.reply.take(60)}'")
         decision.anim?.let { spec ->
             val items = store.packs().firstOrNull { it.id == spec.packId }?.items.orEmpty()
             AnimPlayer.play(scope, api, botId, msg.chatId, spec, msg.firstName, items, decision.menu)
@@ -356,14 +356,14 @@ class LocalBotService : Service() {
         }
         if (decision.dice.isNotBlank()) {
             api.sendDice(msg.chatId, decision.dice)
-                .onFailure { DeviceLlm.log("❌ Кубик не отправлен: ${it.message?.take(120)}") }
+                .onFailure { BotLog.log(botId, "❌ Кубик не отправлен: ${it.message?.take(120)}") }
             return
         }
         if (decision.reply.isBlank()) return
         // Для ответа ИИ «печатает…» уже показано во время генерации — не дублируем паузу.
         if (decision.source != "ИИ") withTyping(api, store, botId, msg.chatId)
         api.sendMessage(msg.chatId, decision.reply, keyboard, decision.menu)
-            .onFailure { DeviceLlm.log("❌ Не отправлено (${decision.source}): ${it.message ?: "?"}") }
+            .onFailure { BotLog.log(botId, "❌ Не отправлено (${decision.source}): ${it.message ?: "?"}") }
     }
 
     /** «Печатает…» + пауза-имитация набора (как typing_plugin, сек из настроек бота). */
@@ -412,7 +412,7 @@ class LocalBotService : Service() {
             store.schedule(botId).forEach { event ->
                 known.addAll(event.menu.withIds().map { it.id })
             }
-            DeviceLlm.log("⚠️ Кнопка '${cb.data}' не найдена в меню этого бота. " +
+            BotLog.log(botId, "⚠️ Кнопка '${cb.data}' не найдена в меню этого бота. " +
                 "Известно: ${known.ifEmpty { listOf("— (меню пусто — пересоздай правила/расписание)") }.joinToString(", ").take(300)}")
             api.answerCallbackQuery(
                 cb.callbackId,
@@ -420,7 +420,7 @@ class LocalBotService : Service() {
             )
             return
         }
-        DeviceLlm.log("🔘 Кнопка «${btn.label}» (${btn.action})")
+        BotLog.log(botId, "🔘 Кнопка «${btn.label}» (${btn.action})")
         api.answerCallbackQuery(cb.callbackId, btn.toast)
 
         // Inline-кнопка с «объявительной» надписью (своя, из импорта или
@@ -482,7 +482,7 @@ class LocalBotService : Service() {
                 }
                 store.setRemindersOn(on, botId)
                 setState(botId) { it.copy(remindersOn = on) }
-                DeviceLlm.log(
+                BotLog.log(botId,
                     if (on) "▶️ Напоминания включены (кнопкой в Telegram)"
                     else "⏹ Напоминания выключены (кнопкой в Telegram)")
                 // Правим сообщение под кнопкой, как в оригинальном боте:
@@ -506,7 +506,7 @@ class LocalBotService : Service() {
             }
             "dice" -> {
                 api.sendDice(cb.chatId, btn.text.trim().ifBlank { "🎲" })
-                    .onFailure { DeviceLlm.log("❌ Кубик не отправлен: ${it.message?.take(120)}") }
+                    .onFailure { BotLog.log(botId, "❌ Кубик не отправлен: ${it.message?.take(120)}") }
             }
             "url" -> {
                 // Кнопка-ссылка: Telegram сам открывает url, боту делать
@@ -584,7 +584,7 @@ class LocalBotService : Service() {
                         // Пост в канал публикаций (например, дайджест 10:20/20:40).
                         val channel = store.channelId(botId)
                         if (channel.isBlank()) {
-                            DeviceLlm.log("⚠️ Событие ${e.timeLabel()} в канал, но канал не задан")
+                            BotLog.log(botId, "⚠️ Событие ${e.timeLabel()} в канал, но канал не задан")
                         } else {
                             val variants = e.text.split(" | ").map { it.trim() }
                                 .filter { it.isNotBlank() }
@@ -592,14 +592,14 @@ class LocalBotService : Service() {
                             val postText = if (variants.isEmpty()) e.text
                                 else variants[dayIdx % variants.size]
                             api.sendTo(channel, postText, e.menu.withIds())
-                                .onFailure { DeviceLlm.log("❌ Пост в канал не отправлен: ${it.message ?: "?"}") }
-                            DeviceLlm.log("📢 Пост в канал $channel: ${postText.take(60)}")
+                                .onFailure { BotLog.log(botId, "❌ Пост в канал не отправлен: ${it.message ?: "?"}") }
+                            BotLog.log(botId, "📢 Пост в канал $channel: ${postText.take(60)}")
                         }
                     } else {
                         withTyping(api, store, botId, chatId)
                         api.sendMessage(chatId, e.text, inlineMenu = e.menu.withIds())
-                            .onFailure { DeviceLlm.log("❌ Напоминание не отправлено: ${it.message ?: "?"}") }
-                        DeviceLlm.log("⏰ Напоминание ${e.timeLabel()}: ${e.text.take(60)}")
+                            .onFailure { BotLog.log(botId, "❌ Напоминание не отправлено: ${it.message ?: "?"}") }
+                        BotLog.log(botId, "⏰ Напоминание ${e.timeLabel()}: ${e.text.take(60)}")
                     }
                     sentToday.add(key)
                     delay(400)
@@ -609,7 +609,7 @@ class LocalBotService : Service() {
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                DeviceLlm.log("⚠️ Планировщик: ${e.message ?: e.javaClass.simpleName}")
+                BotLog.log(botId, "⚠️ Планировщик: ${e.message ?: e.javaClass.simpleName}")
             }
         }
     }

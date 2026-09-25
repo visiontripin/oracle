@@ -1,5 +1,7 @@
 package com.botcontrol.admin.ui.screens
 
+import com.botcontrol.admin.ui.components.ConfirmRequest
+import com.botcontrol.admin.ui.components.ConfirmHost
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -38,6 +40,8 @@ import kotlinx.coroutines.launch
  */
 @Composable
 fun BehaviorScreen(localStore: LocalBotStore, onBack: () -> Unit) {
+    val confirm = remember { mutableStateOf<ConfirmRequest?>(null) }
+    ConfirmHost(confirm)
     val scope = rememberCoroutineScope()
     var botId by remember { mutableStateOf(0L) }
     var typing by remember { mutableStateOf(4) }
@@ -131,12 +135,12 @@ fun BehaviorScreen(localStore: LocalBotStore, onBack: () -> Unit) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text("• $question", style = MaterialTheme.typography.bodySmall,
                     modifier = Modifier.weight(1f))
-                TextButton(onClick = {
+                TextButton(onClick = { confirm.value = ConfirmRequest("Удалить уточняющий вопрос?", question) {
                     scope.launch {
                         localStore.setClarifyQuestions(clarify - question, botId)
                         clarify = clarify - question
                     }
-                }) { Text("✕") }
+                } }) { Text("✕") }
             }
         }
         Row(verticalAlignment = Alignment.CenterVertically,

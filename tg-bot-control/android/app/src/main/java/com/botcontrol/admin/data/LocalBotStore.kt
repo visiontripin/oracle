@@ -106,6 +106,9 @@ class LocalBotStore(context: Context) {
     suspend fun removeProfile(id: Long) = withContext(Dispatchers.IO) {
         saveProfiles(profiles().filterNot { it.id == id })
         encrypted.edit().remove("token_$id").apply()
+        // Наборы, импортированные для этого бота, уходят вместе с ним;
+        // общие наборы библиотеки (ownerBotId = 0) остаются.
+        packs().let { all -> if (all.any { it.ownerBotId == id }) setPacks(all.filterNot { it.ownerBotId == id }) }
         if (activeBotIdCache == id || appContext.localBotDataStore.data
                 .map { it[KEY_ACTIVE_BOT] ?: 0L }.first() == id) {
             val next = profiles().firstOrNull()?.id ?: 0L

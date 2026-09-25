@@ -194,7 +194,13 @@ object SettingsExporter {
         val rules = repository.botRules(botId).filter { it.enabled }
         val events = store.schedule(botId).filter { it.enabled }
         val menus = collectMenus(rules, events)
-        val packs = store.packs().filter { it.items.isNotEmpty() }
+        // Только наборы ЭТОГО бота: на которые ссылаются его правила/кнопки/
+        // анимации/расписание или импортированные для него. Раньше в .py
+        // попадала вся библиотека — тексты других ботов.
+        val refs = com.google.gson.Gson().let { g -> g.toJson(rules) + g.toJson(events) }
+        val packs = store.packs().filter {
+            it.items.isNotEmpty() && (it.ownerBotId == botId || refs.contains(it.id))
+        }
         val consts = packConsts(packs)
 
         // ---------- анимации: свои кадры → константы + помощник ----------

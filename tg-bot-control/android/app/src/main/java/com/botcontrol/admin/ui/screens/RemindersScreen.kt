@@ -1,5 +1,7 @@
 package com.botcontrol.admin.ui.screens
 
+import com.botcontrol.admin.ui.components.ConfirmRequest
+import com.botcontrol.admin.ui.components.ConfirmHost
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -48,6 +50,8 @@ import kotlinx.coroutines.launch
  */
 @Composable
 fun RemindersScreen(localStore: LocalBotStore, onBack: () -> Unit) {
+    val confirm = remember { mutableStateOf<ConfirmRequest?>(null) }
+    ConfirmHost(confirm)
     val scope = rememberCoroutineScope()
     var events by remember { mutableStateOf<List<ScheduleEvent>>(emptyList()) }
     var packs by remember { mutableStateOf<List<ReplyPack>>(emptyList()) }
@@ -108,12 +112,12 @@ fun RemindersScreen(localStore: LocalBotStore, onBack: () -> Unit) {
                             load()
                         }
                     })
-                    TextButton(onClick = {
+                    TextButton(onClick = { confirm.value = ConfirmRequest("Удалить событие?", "${event.timeLabel()} — ${event.text.take(80)}") {
                         scope.launch {
                             localStore.setSchedule(localStore.schedule().filter { it.id != event.id })
                             load()
                         }
-                    }) { Text("✕") }
+                    } }) { Text("✕") }
                 }
             }
         }

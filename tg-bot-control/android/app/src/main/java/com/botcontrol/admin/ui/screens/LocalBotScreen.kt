@@ -1,5 +1,7 @@
 package com.botcontrol.admin.ui.screens
 
+import com.botcontrol.admin.ui.components.ConfirmRequest
+import com.botcontrol.admin.ui.components.ConfirmHost
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -60,6 +62,8 @@ fun LocalBotScreen(
     onChangeMode: () -> Unit,
     onEditToken: () -> Unit,
 ) {
+    val confirm = remember { mutableStateOf<ConfirmRequest?>(null) }
+    ConfirmHost(confirm)
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val states by LocalBotService.states.collectAsState()
@@ -188,9 +192,9 @@ fun LocalBotScreen(
                             load()
                         }
                     })
-                    TextButton(onClick = {
+                    TextButton(onClick = { confirm.value = ConfirmRequest("Удалить правило?", rule.pattern) {
                         scope.launch { repository.deleteBotRule(rule.id); load() }
-                    }) { Text("✕") }
+                    } }) { Text("✕") }
                 }
             }
         }
@@ -211,12 +215,12 @@ fun LocalBotScreen(
                 Row(Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text("🔘 $label", Modifier.weight(1f))
                     TextButton(onClick = { editingButton = label }) { Text("✎") }
-                    TextButton(onClick = {
+                    TextButton(onClick = { confirm.value = ConfirmRequest("Удалить кнопку?", "«$label»") {
                         scope.launch {
                             localStore.setKeyboard(keyboard - label)
                             load()
                         }
-                    }) { Text("✕") }
+                    } }) { Text("✕") }
                 }
             }
         }

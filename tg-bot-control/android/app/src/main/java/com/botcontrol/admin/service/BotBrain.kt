@@ -36,7 +36,9 @@ data class BotDecision(
  */
 object BotBrain {
 
-    private val lastAnswerAt = HashMap<Long, Long>() // chat -> epoch sec
+    // «botId:chatId» -> epoch sec. В личке chatId = id пользователя и совпадает
+    // у всех ботов — без botId кулдаун одного бота глушил другие.
+    private val lastAnswerAt = java.util.concurrent.ConcurrentHashMap<String, Long>()
 
     /** Проблема ИИ висит в статусе бота до первого успешного ответа. */
     private fun addLlmProblem(botId: Long, text: String) {
@@ -199,20 +201,20 @@ object BotBrain {
         }
 
         // 3) Антифлуд на «незнакомых» сообщениях (как ANSWER_COOLDOWN в оригинале)
-        val cd = store.cooldownSec().toLong()
+        val cd = store.cooldownSec(botId).toLong()
         if (respectCooldown && cd > 0) {
             val now = System.currentTimeMillis() / 1000
-            val last = lastAnswerAt[chatId] ?: 0L
+            val last = lastAnswerAt["$botId:$chatId"] ?: 0L
             if (now - last < cd) {
                 trace?.invoke("⏳ Кулдаун ${cd} с — молчу")
                 return BotDecision("кулдаун", "")
             }
-            lastAnswerAt[chatId] = now
+            lastAnswerAt["$botId:$chatId"] = now
         }
 
         // 4) Кодовый запасной ответ (уточняющий вопрос или default).
         //    ИИ здесь НЕ вызывается: он — только в сценариях (шаг 2, правило «ИИ»).
-        return fallback(store)
+        return fallback(store, botId)
     }
 
     private suspend fun llmReply(
@@ -228,7 +230,7 @@ object BotBrain {
         val model = store.aiModel(botId)
         if (!store.llmEnabled(botId) || model.isBlank()) {
             trace?.invoke("ИИ выключен или модель не выбрана («Модели ИИ» → выбрать)")
-            return fallback(store)
+            return fallback(store, botId)
         }
         trace?.invoke("🤖 Спрашиваю ИИ (модель: $model)…")
         onLlmStart?.invoke()
@@ -247,16 +249,20 @@ object BotBrain {
                 onFailure = { e ->
                     trace?.invoke("❌ Ошибка ИИ: ${e.message?.take(120)}")
                     addLlmProblem(botId, "ИИ: ${e.message?.take(120)}")
-                    fallback(store)
+                    fallback(store, botId)
                 },
             )
     }
 
-    private suspend fun fallback(store: LocalBotStore): BotDecision {
-        val clarify = if (store.clarifyEnabled()) {
-            store.clarifyQuestions().randomOrNull().orEmpty()
+    /**
+     * Запасной ответ СВОЕГО бота. Раньше читался без botId → «активный бот»
+     * из интерфейса: уточняющие вопросы одного бота отвечали во всех.
+     */
+    private suspend fun fallback(store: LocalBotStore, botId: Long): BotDecision {
+        val clarify = if (store.clarifyEnabled(botId)) {
+            store.clarifyQuestions(botId).randomOrNull().orEmpty()
         } else ""
-        val reply = clarify.ifBlank { store.defaultReply() }
+        val reply = clarify.ifBlank { store.defaultReply(botId) }
         return BotDecision(
             if (clarify.isNotBlank()) "уточняющий вопрос" else "запасной ответ",
             reply,
