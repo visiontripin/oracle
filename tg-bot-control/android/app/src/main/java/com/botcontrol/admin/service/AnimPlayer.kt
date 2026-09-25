@@ -160,11 +160,15 @@ object AnimPlayer {
                 continue
             }
             if (i > 0 || editMessageId == null) delay(step)
+            // Без итогового текста меню вешаем на последний кадр: иначе
+            // editMessageMedia/Caption снимет клавиатуру, и кнопки пропадут
+            // (навигация по слайдам под одной картинкой).
+            val tailMenu = if (i == frames.lastIndex && finalText.isBlank()) menu else emptyList()
             val err = if (f.src == curSrc) {
-                attempt(botId) { api.editMessageCaption(chatId, m, f.caption) }
+                attempt(botId) { api.editMessageCaption(chatId, m, f.caption, tailMenu) }
             } else {
                 attempt(botId) {
-                    api.editMessageMedia(chatId, m, resolve(f.src), f.caption).onSuccess { remember(f.src, it) }
+                    api.editMessageMedia(chatId, m, resolve(f.src), f.caption, tailMenu).onSuccess { remember(f.src, it) }
                 }
             }
             if (err != null) {
@@ -181,9 +185,9 @@ object AnimPlayer {
             curSrc = f.src
         }
         val m = mid ?: return
-        if (!onlyOne && (finalText.isNotBlank() || menu.isNotEmpty())) {
+        if (!onlyOne && finalText.isNotBlank()) {
             delay(step)
-            attempt(botId) { api.editMessageCaption(chatId, m, finalText.ifBlank { frames.last().caption }, menu) }
+            attempt(botId) { api.editMessageCaption(chatId, m, finalText, menu) }
                 ?.let { DeviceLlm.log("❌ [$botId] Фото-анимация: итог не показан: ${it.take(160)}") }
         }
     }

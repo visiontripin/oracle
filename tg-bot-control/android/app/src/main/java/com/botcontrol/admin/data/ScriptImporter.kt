@@ -209,6 +209,7 @@ private class Parser(source: String) {
     private val packHelpers = HashMap<String, String>()
     /** Функции-помощники анимации: цикл + edit_message_text внутри. */
     private val animHelpers = HashSet<String>()
+    private val animEditFns = setOf("edit_message_text", "edit_message_media", "edit_message_caption")
     private val helpers = HashMap<String, Helper>()
     private val keyboards = LinkedHashMap<String, Keyboard>()
     private val attachedKeyboards = HashSet<String>()
@@ -396,8 +397,9 @@ private class Parser(source: String) {
             }
             val inner = src.calls(bs, be)
             // def play_animation(chat_id, frames, delay, final): for f in frames: … edit_message_text
-            if (Regex("""(?m)^\s*for\s+\w+\s+in\s""").containsMatchIn(body) &&
-                inner.any { it.shortFn == "edit_message_text" || it.fn.endsWith(".edit_text") }) {
+            // (и «for i, frame in enumerate(frames)», и фото: edit_message_media / _caption)
+            if (Regex("""(?m)^\s*for\s+\(?\s*\w+(\s*,\s*\w+)*\s*\)?\s+in\s""").containsMatchIn(body) &&
+                inner.any { it.shortFn in animEditFns || it.fn.endsWith(".edit_text") }) {
                 animHelpers.add(f.name)
                 continue
             }
