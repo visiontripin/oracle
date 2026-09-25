@@ -465,6 +465,135 @@ class TelegramApi(private val token: String) {
             }
         }
 
+    // ------------------------------------------------------------------
+    // Фото-анимация: sendPhoto → editMessageMedia / editMessageCaption.
+    // src — ссылка https, file_id Telegram или путь к файлу на телефоне
+    // (тогда multipart). Возвращают file_id, чтобы не загружать повторно.
+    // ------------------------------------------------------------------
+
+    private fun menuJson(inlineMenu: List<InlineBtn>): String? =
+        if (inlineMenu.isEmpty()) null
+        else Gson().toJson(mapOf("inline_keyboard" to inlineMenu.layoutRows().map { r -> r.map { it.toApi() } }))
+
+    private fun localFile(src: String): java.io.File? {
+        val path = src.removePrefix("file://").removePrefix("file:")
+        return if (path.startsWith("/")) java.io.File(path).takeIf { it.isFile } else null
+    }
+
+    private fun imageMime(f: java.io.File) = when (f.extension.lowercase()) {
+        "png" -> "image/png"
+        "webp" -> "image/webp"
+        else -> "image/jpeg"
+    }.toMediaType()
+
+    /** file_id самой большой версии фото из ответа Telegram. */
+    private fun photoFileId(body: String): String = runCatching {
+        JsonParser.parseString(body).asJsonObject.getAsJsonObject("result")
+            .getAsJsonArray("photo").last().asJsonObject.get("file_id").asString
+    }.getOrDefault("")
+
+    private fun messageIdOf(body: String): Int = runCatching {
+        JsonParser.parseString(body).asJsonObject.getAsJsonObject("result").get("message_id").asInt
+    }.getOrDefault(0)
+
+    private fun describeError(method: String, code: Int, body: String) =
+        IllegalStateException("$method HTTP $code: ${body.take(300)}")
+
+    /** Фото-кадр новым сообщением. Результат: message_id и file_id. */
+    suspend fun sendPhotoForId(
+        chatId: Long,
+        src: String,
+        caption: String = "",
+        inlineMenu: List<InlineBtn> = emptyList(),
+    ): Result<Pair<Int, String>> = withContext(Dispatchers.IO) {
+        try {
+            val file = localFile(src)
+            if (file == null && src.startsWith("/")) error("файл картинки не найден: $src")
+            val body = if (file != null) {
+                val b = MultipartBody.Builder().setType(MultipartBody.FORM)
+                    .addFormDataPart("chat_id", chatId.toString())
+                    .addFormDataPart("caption", caption.take(1024))
+                    .addFormDataPart("photo", file.name, file.asRequestBody(imageMime(file)))
+                menuJson(inlineMenu)?.let { b.addFormDataPart("reply_markup", it) }
+                b.build()
+            } else {
+                val m = mutableMapOf<String, Any>("chat_id" to chatId, "photo" to src, "caption" to caption.take(1024))
+                menuJson(inlineMenu)?.let { m["reply_markup"] = it }
+                Gson().toJson(m).toRequestBody(json)
+            }
+            fastClient.newCall(Request.Builder().url(url("sendPhoto")).post(body).build())
+                .execute().use { resp ->
+                    val text = resp.body?.string().orEmpty()
+                    if (resp.isSuccessful) Result.success(messageIdOf(text) to photoFileId(text))
+                    else Result.failure(describeError("sendPhoto", resp.code, text))
+                }
+        } catch (e: Throwable) {
+            Result.failure(e)
+        }
+    }
+
+    /** Заменить картинку (и подпись) в сообщении. Результат: file_id. */
+    suspend fun editMessageMedia(
+        chatId: Long,
+        messageId: Int,
+        src: String,
+        caption: String = "",
+        inlineMenu: List<InlineBtn> = emptyList(),
+    ): Result<String> = withContext(Dispatchers.IO) {
+        try {
+            val file = localFile(src)
+            if (file == null && src.startsWith("/")) error("файл картинки не найден: $src")
+            val media = Gson().toJson(mapOf(
+                "type" to "photo",
+                "media" to if (file != null) "attach://frame" else src,
+                "caption" to caption.take(1024),
+            ))
+            val body = if (file != null) {
+                val b = MultipartBody.Builder().setType(MultipartBody.FORM)
+                    .addFormDataPart("chat_id", chatId.toString())
+                    .addFormDataPart("message_id", messageId.toString())
+                    .addFormDataPart("media", media)
+                    .addFormDataPart("frame", file.name, file.asRequestBody(imageMime(file)))
+                menuJson(inlineMenu)?.let { b.addFormDataPart("reply_markup", it) }
+                b.build()
+            } else {
+                val m = mutableMapOf<String, Any>("chat_id" to chatId, "message_id" to messageId, "media" to media)
+                menuJson(inlineMenu)?.let { m["reply_markup"] = it }
+                Gson().toJson(m).toRequestBody(json)
+            }
+            fastClient.newCall(Request.Builder().url(url("editMessageMedia")).post(body).build())
+                .execute().use { resp ->
+                    val text = resp.body?.string().orEmpty()
+                    if (resp.isSuccessful) Result.success(photoFileId(text))
+                    else Result.failure(describeError("editMessageMedia", resp.code, text))
+                }
+        } catch (e: Throwable) {
+            Result.failure(e)
+        }
+    }
+
+    /** Сменить только подпись под фото (картинка та же). */
+    suspend fun editMessageCaption(
+        chatId: Long,
+        messageId: Int,
+        caption: String,
+        inlineMenu: List<InlineBtn> = emptyList(),
+    ): Result<Unit> = withContext(Dispatchers.IO) {
+        try {
+            val m = mutableMapOf<String, Any>("chat_id" to chatId, "message_id" to messageId, "caption" to caption.take(1024))
+            menuJson(inlineMenu)?.let { m["reply_markup"] = it }
+            fastClient.newCall(Request.Builder().url(url("editMessageCaption"))
+                .post(Gson().toJson(m).toRequestBody(json)).build())
+                .execute().use { resp ->
+                    val text = resp.body?.string().orEmpty()
+                    if (resp.isSuccessful) Result.success(Unit)
+                    else Result.failure(describeError("editMessageCaption", resp.code, text))
+                }
+        } catch (e: Throwable) {
+            Result.failure(e)
+        }
+    }
+
     /** Отредактировать текст своего сообщения (сохраняя inline-кнопки). */
     suspend fun editMessageText(
         chatId: Long,

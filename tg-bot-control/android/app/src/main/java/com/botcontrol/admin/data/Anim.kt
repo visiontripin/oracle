@@ -231,7 +231,7 @@ object Anim {
     /** Короткое описание для списков: «🎞 Спиннер · 20 кадров · 0,6 с». */
     fun describe(spec: AnimSpec): String {
         val n = frames(spec, rnd = Random(1)).size
-        val p = preset(spec.preset).title
+        val p = if (isPhotoAnim(spec)) "🖼 Фото-кадры" else preset(spec.preset).title
         return "$p · кадров: $n · шаг ${"%.1f".format(interval(spec) / 1000.0)} с"
     }
 
@@ -246,6 +246,54 @@ object Anim {
 
     /** HTML-экранирование для <pre> (моноширинные кадры). */
     fun html(s: String): String = s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+    // ------------------------------------------------------------------
+    // фото-кадры (editMessageMedia): флипбук из картинок, квест с иллюстрациями
+    // ------------------------------------------------------------------
+
+    /** Первая строка фото-кадра: «photo: <ссылка https | file_id | путь к файлу>». */
+    const val PHOTO_PREFIX = "photo:"
+
+    data class PhotoFrame(val src: String, val caption: String)
+
+    /** Источник картинки кадра или null, если кадр текстовый. */
+    fun photoSrc(frame: String): String? {
+        val first = frame.trimStart('\n', ' ', '\u2800').substringBefore('\n').trim()
+        if (!first.startsWith(PHOTO_PREFIX, ignoreCase = true)) return null
+        return first.substring(PHOTO_PREFIX.length).trim().ifBlank { null }
+    }
+
+    /** Подпись фото-кадра (всё после строки «photo: …»). */
+    fun photoCaption(frame: String): String =
+        if (photoSrc(frame) == null) frame.trim()
+        else frame.trimStart('\n', ' ', '\u2800').substringAfter('\n', "").trim()
+
+    /** Анимация картинками: свои кадры, хотя бы в одном — «photo: …». */
+    fun isPhotoAnim(spec: AnimSpec): Boolean =
+        spec.preset == "custom" && spec.frames.any { photoSrc(it) != null }
+
+    /** Файл с телефона (а не ссылка или file_id Telegram). */
+    fun isLocalSrc(src: String): Boolean = src.startsWith("/") || src.startsWith("file:")
+
+    fun photoFrame(src: String, caption: String = ""): String =
+        "$PHOTO_PREFIX $src" + if (caption.isNotBlank()) "\n$caption" else ""
+
+    /**
+     * Кадры фото-анимации: текстовый кадр без картинки оставляет прежнюю
+     * картинку и меняет только подпись; кадры до первой картинки получают
+     * её же. Соседние одинаковые — убираются.
+     */
+    fun photoFrames(spec: AnimSpec, user: String = ""): List<PhotoFrame> {
+        val fr = frames(spec, user)
+        var cur = fr.firstNotNullOfOrNull { photoSrc(it) } ?: return emptyList()
+        val out = ArrayList<PhotoFrame>()
+        for (f in fr) {
+            photoSrc(f)?.let { cur = it }
+            val pf = PhotoFrame(cur, photoCaption(f).take(1024))
+            if (out.lastOrNull() != pf) out.add(pf)
+        }
+        return out
+    }
 
     /** Кубики Telegram (sendDice): анимированный эмодзи со случайным значением. */
     val DICE = listOf("🎲", "🎯", "🏀", "⚽", "🎳", "🎰")

@@ -1070,7 +1070,9 @@ private class Parser(source: String) {
                 .coerceIn(Anim.MIN_INTERVAL, Anim.MAX_INTERVAL),
             loops = loops.coerceIn(1, 10),
             finalText = final?.let { normalizeText(it) }.orEmpty(),
-            mono = monoKw ?: if (preset != null) base.mono else frames.orEmpty().any { '\n' in it },
+            mono = monoKw ?: if (preset != null) base.mono else frames.orEmpty().let { fr ->
+                fr.any { '\n' in it } && fr.none { Anim.photoSrc(it) != null } // фото-кадры — подписи, не ASCII
+            },
             packId = packId,
         )
         val edit = c.kwargs.containsKey("message_id")
@@ -1108,7 +1110,7 @@ private class Parser(source: String) {
                 frames = frames.map { normalizeText(it) },
                 intervalMs = ((delay ?: 0.7) * 1000).toInt().coerceIn(Anim.MIN_INTERVAL, Anim.MAX_INTERVAL),
                 finalText = final?.let { normalizeText(it) }.orEmpty(),
-                mono = frames.any { '\n' in it },
+                mono = frames.any { '\n' in it } && frames.none { Anim.photoSrc(it) != null },
             )
             return Ev.Anim(loopOff, spec, finalEdit?.markup ?: sendMarkup, false)
         }

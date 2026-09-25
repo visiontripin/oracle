@@ -129,6 +129,7 @@ ANIM_ROCKET = [ "  🚀\n\n🌍", "\n  🚀\n🌍", "\n\n🌍🔥" ]      # св
    • готовый эффект строкой: play_animation(msg.chat.id, "progress", 0.6, "✅ Готово", text="Загрузка"). Эффекты: spinner, progress, dots, countdown, typewriter, matrix, slot, moon, clock, heart;
    • итог из набора: play_animation(chat_id, "slot", 0.5, pack=PREDICTIONS); повторы: loops=2;
    • в обработчике кнопки: message_id=call.message.message_id — анимируется само сообщение с кнопками;
+   • КАРТИНКИ (фото-флипбук, квест с иллюстрациями): кадр "photo: https://ссылка.jpg\nподпись" — BotControl пришлёт фото и будет менять картинку (editMessageMedia); кадр без photo: меняет только подпись. Пример: ANIM_QUEST = [ "photo: https://…/forest.jpg\nГлава 1. Лес", "Слышишь шорох…", "photo: https://…/hut.jpg\nГлава 2. Хижина" ];
    • delay — от 0.5 до 3 секунд (Telegram не любит частые правки); итог и кнопки — в final и reply_markup.
 11. КУБИКИ Telegram (анимированный случайный результат): bot.send_dice(msg.chat.id, emoji="🎲") — годятся 🎲 🎯 🏀 ⚽ 🎳 🎰; можно и в ветке кнопки.
 

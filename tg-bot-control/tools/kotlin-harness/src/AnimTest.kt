@@ -32,6 +32,16 @@ fun main() {
     check("encode→decode кадров с ведущими переносами",
         Anim.decode(Anim.encode(AnimSpec(preset = "custom", frames = lead))).frames == lead)
     check("keepLayout: ⠀ перед ведущим переносом", Anim.keepLayout("\nx") == "\u2800\nx" && Anim.keepLayout("x") == "x")
+    val ph = AnimSpec(preset = "custom", frames = listOf("Загрузка…", "photo: https://x/a.jpg\nГлава 1", "шорох", "photo: /data/f.jpg\nГлава 2 {user}"))
+    val pf = Anim.photoFrames(ph, "Нео")
+    check("фото-анимация распознана", Anim.isPhotoAnim(ph) && !Anim.isPhotoAnim(AnimSpec(preset = "custom", frames = listOf("a"))))
+    check("фото-кадры: картинка наследуется, подписи", pf == listOf(
+        Anim.PhotoFrame("https://x/a.jpg", "Загрузка…"), Anim.PhotoFrame("https://x/a.jpg", "Глава 1"),
+        Anim.PhotoFrame("https://x/a.jpg", "шорох"), Anim.PhotoFrame("/data/f.jpg", "Глава 2 Нео")))
+    check("локальный файл / ссылка", Anim.isLocalSrc("/data/f.jpg") && !Anim.isLocalSrc("https://x") && !Anim.isLocalSrc("AgACAgIAAx"))
+    check("photoFrame ↔ photoSrc", Anim.photoSrc(Anim.photoFrame("AgAC123", "cap")) == "AgAC123" &&
+        Anim.photoCaption(Anim.photoFrame("AgAC123", "cap")) == "cap")
+    check("описание фото-анимации", Anim.describe(ph).startsWith("🖼"))
     val slot = AnimSpec(preset = "slot", packId = "p")
     check("слот: итог из набора", Anim.final(slot, "", listOf("ДЖЕКПОТ")) == "ДЖЕКПОТ")
     check("отсчёт: итог по умолчанию 🚀", Anim.final(AnimSpec(preset = "countdown")) == "🚀")

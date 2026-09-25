@@ -71,6 +71,21 @@ def countdown(msg):
 COUNT_FRAMES = ["3️⃣", "2️⃣", "1️⃣"]
 
 
+# Фото-квест: картинка меняется по ходу истории (editMessageMedia),
+# кадр без photo: меняет только подпись (editMessageCaption).
+TOUR_FRAMES = [
+    "photo: https://picsum.photos/id/1018/800/500\nГлава 1. Долина. Ты стоишь у реки.",
+    "Слышишь шорох в кустах…",
+    "photo: https://picsum.photos/id/1043/800/500\nГлава 2. Лес. Тропа уходит вверх.",
+    "photo: https://picsum.photos/id/1036/800/500\nГлава 3. Перевал.",
+]
+
+
+@bot.message_handler(commands=["tour"])
+def tour(msg):
+    play_animation(msg.chat.id, TOUR_FRAMES, 1.5, "🏁 Ты дошёл, {user}! Конец главы.")
+
+
 @bot.message_handler(commands=["dart"])
 def dart(msg):
     bot.send_dice(msg.chat.id, emoji="🎯")

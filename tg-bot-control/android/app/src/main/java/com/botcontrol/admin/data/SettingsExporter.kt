@@ -225,10 +225,32 @@ object SettingsExporter {
             listOf(
                 "def play_animation(chat_id, frames, delay=0.7, final=None, reply_markup=None,",
                 "                   message_id=None, loops=1, pack=None, **kw):",
-                "    \"\"\"Одно сообщение правится кадр за кадром. preset=/text=/mono= читает BotControl.\"\"\"",
+                "    \"\"\"Одно сообщение правится кадр за кадром. preset=/text=/mono= читает BotControl.",
+                "    Кадр «photo: ссылка\\nподпись» — картинка (editMessageMedia), без photo: — только подпись.\"\"\"",
                 "    frames = list(frames) * max(1, loops)",
                 "    if pack:",
                 "        final = random.choice(pack)",
+                "    photos = [f.partition(\"\\n\")[0][6:].strip() for f in frames if f.startswith(\"photo:\")]",
+                "    if photos:",
+                "        def caption(f):",
+                "            return f.partition(\"\\n\")[2] if f.startswith(\"photo:\") else f",
+                "        cur = photos[0]",
+                "        m_id = message_id",
+                "        if m_id is None:",
+                "            m_id = bot.send_photo(chat_id, cur, caption=caption(frames[0])).message_id",
+                "            frames = frames[1:]",
+                "        for frame in frames:",
+                "            time.sleep(delay)",
+                "            src = frame.partition(\"\\n\")[0][6:].strip() if frame.startswith(\"photo:\") else cur",
+                "            if src != cur:",
+                "                bot.edit_message_media(InputMediaPhoto(src, caption=caption(frame)), chat_id, m_id)",
+                "                cur = src",
+                "            else:",
+                "                bot.edit_message_caption(caption(frame), chat_id, m_id)",
+                "        if final:",
+                "            time.sleep(delay)",
+                "            bot.edit_message_caption(final, chat_id, m_id, reply_markup=reply_markup)",
+                "        return",
                 "    m_id = message_id",
                 "    if m_id is None:",
                 "        m_id = bot.send_message(chat_id, frames[0]).message_id",
@@ -246,6 +268,9 @@ object SettingsExporter {
             sb.appendLine()
             sb.appendLine()
             animFrames.forEach { (name, frames) ->
+                if (frames.any { f -> Anim.photoSrc(f)?.let { Anim.isLocalSrc(it) } == true }) {
+                    sb.appendLine("# ⚠️ в кадрах — файлы с телефона: в другом месте замени их ссылками https://")
+                }
                 sb.appendLine("$name = [")
                 frames.forEach { sb.appendLine("    ${py(it)},") }
                 sb.appendLine("]")

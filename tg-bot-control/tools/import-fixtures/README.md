@@ -76,3 +76,6 @@ for f in ../import-fixtures/*.py ../../smith-bot-ready.py; do
 done
 ./run.sh out AnimTestKt | tail -1                          # ждём ALL OK
 ```
+
+`anim-demo-bot.py` с v1.6.1 содержит ещё `/tour` — фото-квест (4 кадра:
+3 картинки по ссылке + кадр «только подпись»), 5 команд.

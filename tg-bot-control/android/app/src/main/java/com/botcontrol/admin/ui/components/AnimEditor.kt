@@ -1,5 +1,11 @@
 package com.botcontrol.admin.ui.components
 
+import android.content.Context
+import android.graphics.BitmapFactory
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -15,6 +21,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -25,6 +32,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import com.botcontrol.admin.data.Anim
@@ -45,6 +55,14 @@ fun AnimEditor(
     onChange: (AnimSpec) -> Unit,
 ) {
     val preset = Anim.preset(spec.preset)
+    val context = LocalContext.current
+    // Фото из галереи копируются в память приложения: ссылка content:// живёт
+    // недолго, а анимация должна работать и через неделю.
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris ->
+        val added = uris.mapNotNull { copyAnimImage(context, it) }.map { Anim.photoFrame(it) }
+        if (added.isNotEmpty()) onChange(spec.copy(preset = "custom", frames = spec.frames + added, mono = false))
+    }
+    val photo = Anim.isPhotoAnim(spec)
     Column {
         Text("Эффект", style = MaterialTheme.typography.bodySmall)
         Row(
@@ -84,12 +102,22 @@ fun AnimEditor(
                 modifier = Modifier.fillMaxWidth().heightIn(min = 140.dp, max = 260.dp),
             )
             Text("Идеи: ASCII-заставка, флипбук (персонаж двигается), текстовый квест — " +
-                "картинка меняется по ходу истории. {user} — имя собеседника.",
+                "картинка меняется по ходу истории. {user} — имя собеседника.\n" +
+                "Кадр-картинка: первая строка «photo: ссылка», ниже — подпись. " +
+                "Кадр без photo: меняет только подпись под той же картинкой.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Checkbox(checked = spec.mono, onCheckedChange = { onChange(spec.copy(mono = it)) })
-                Text("Моноширинный шрифт (для ASCII-арта)", style = MaterialTheme.typography.bodySmall)
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                OutlinedButton(onClick = { picker.launch("image/*") }) { Text("🖼 Фото из галереи") }
+                OutlinedButton(onClick = {
+                    onChange(spec.copy(frames = spec.frames + Anim.photoFrame("https://", "Подпись"), mono = false))
+                }) { Text("🔗 По ссылке") }
+            }
+            if (!photo) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(checked = spec.mono, onCheckedChange = { onChange(spec.copy(mono = it)) })
+                    Text("Моноширинный шрифт (для ASCII-арта)", style = MaterialTheme.typography.bodySmall)
+                }
             }
         } else {
             OutlinedTextField(
@@ -158,6 +186,10 @@ fun AnimEditor(
 /** Живой предпросмотр: кадры сменяются с тем же шагом, что и в Telegram. */
 @Composable
 fun AnimPreview(spec: AnimSpec, packItems: List<String> = emptyList()) {
+    if (Anim.isPhotoAnim(spec)) {
+        PhotoPreview(spec, packItems)
+        return
+    }
     val frames = remember(spec) { Anim.frames(spec, "Иван") }
     val final = remember(spec, packItems) { Anim.final(spec, "Иван", packItems) }
     val all = remember(frames, final) { if (final.isNotBlank()) frames + final else frames }
@@ -190,3 +222,70 @@ fun AnimPreview(spec: AnimSpec, packItems: List<String> = emptyList()) {
         }
     }
 }
+
+/** Предпросмотр фото-анимации: картинка кадра + подпись. */
+@Composable
+private fun PhotoPreview(spec: AnimSpec, packItems: List<String>) {
+    val frames = remember(spec) { Anim.photoFrames(spec, "Иван") }
+    val final = remember(spec, packItems) { Anim.final(spec, "Иван", packItems) }
+    val total = frames.size + if (final.isNotBlank()) 1 else 0
+    var index by remember(spec, packItems) { mutableStateOf(0) }
+    LaunchedEffect(spec, packItems) {
+        if (total < 2) return@LaunchedEffect
+        while (true) {
+            delay(if (index == total - 1) 2000L else Anim.interval(spec).toLong())
+            index = if (index >= total - 1) 0 else index + 1
+        }
+    }
+    val frame = frames.getOrNull(minOf(index, frames.lastIndex)) ?: return
+    val caption = if (index >= frames.size) final else frame.caption
+    Card(
+        Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+    ) {
+        Column(Modifier.padding(10.dp)) {
+            Text("Предпросмотр · ${Anim.describe(spec)} · ≈${"%.1f".format(Anim.durationSec(spec))} с",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(Modifier.height(6.dp))
+            val bmp = remember(frame.src) {
+                if (Anim.isLocalSrc(frame.src)) loadThumb(frame.src.removePrefix("file://").removePrefix("file:")) else null
+            }
+            if (bmp != null) {
+                Image(bmp.asImageBitmap(), contentDescription = null, contentScale = ContentScale.Fit,
+                    modifier = Modifier.fillMaxWidth().heightIn(max = 180.dp))
+            } else {
+                Text("🖼 ${if (frame.src.startsWith("http")) frame.src.take(60) else "file_id / " + frame.src.take(40)}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            if (caption.isNotBlank()) {
+                Spacer(Modifier.height(4.dp))
+                Text(caption, style = MaterialTheme.typography.bodyMedium)
+            }
+        }
+    }
+}
+
+/** Уменьшенная копия картинки для предпросмотра (без риска OutOfMemory). */
+private fun loadThumb(path: String): android.graphics.Bitmap? = runCatching {
+    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    BitmapFactory.decodeFile(path, bounds)
+    var sample = 1
+    while (bounds.outWidth / sample > 720 || bounds.outHeight / sample > 720) sample *= 2
+    BitmapFactory.decodeFile(path, BitmapFactory.Options().apply { inSampleSize = sample })
+}.getOrNull()
+
+/** Копия картинки из галереи в files/anim/ — путь для кадра «photo: …». */
+private fun copyAnimImage(context: Context, uri: Uri): String? = runCatching {
+    val dir = java.io.File(context.filesDir, "anim").apply { mkdirs() }
+    val ext = when (context.contentResolver.getType(uri)) {
+        "image/png" -> "png"
+        "image/webp" -> "webp"
+        else -> "jpg"
+    }
+    val file = java.io.File(dir, "img_${System.currentTimeMillis()}_${(1000..9999).random()}.$ext")
+    val input = context.contentResolver.openInputStream(uri) ?: return@runCatching null
+    input.use { inp -> file.outputStream().use { inp.copyTo(it) } }
+    file.absolutePath
+}.getOrNull()

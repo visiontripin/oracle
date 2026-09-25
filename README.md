@@ -26,8 +26,8 @@ Central), поэтому APK собирается в GitHub Actions. Рецеп�
 получение APK из тега — раздел 4 файла
 `tg-bot-control/ПЕРЕДАЧА-КОНТЕКСТА.md`.
 
-Текущая доставка: **v1.6.0 (versionCode 27)**, тег
-`botcontrol-v1.6.0-code27`. Следующий versionCode — **28**.
+Текущая доставка: **v1.6.1 (versionCode 28)**, тег
+`botcontrol-v1.6.1-code28`. Следующий versionCode — **29**.
 
 ## Безопасность
 
