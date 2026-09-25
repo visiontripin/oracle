@@ -30,6 +30,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Bot isolation check (botId in service/ and data/)
+        run: python3 tg-bot-control/tools/check-bot-isolation.py
+
       - uses: actions/setup-java@v4
         with:
           distribution: temurin

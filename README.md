@@ -33,11 +33,11 @@
 | [`tg-bot-control/presentation-bot-ready.py`](tg-bot-control/presentation-bot-ready.py) | бот-презентация для @AppBotcontrol_bot (слайды кнопками, демо анимаций) |
 | [`docs/`](docs/) | веб-страница проекта (GitHub Pages из `/docs`) |
 | [`task.txt`](task.txt) → [`docs/matrix-links.html`](docs/matrix-links.html) | страница-хаб «Matrix Links» (ORACLE → DAROMVPL → BotControl App → ONEDOPEA): неоновый логотип BotControl в цикле и кнопка GitHub; `docs/matrix-links.html` — точная копия `task.txt` для Pages |
-| `botcontrol-handoff.zip` | архив для переноса проекта в чистый workspace |
+| [`tg-bot-control/tools/check-bot-isolation.py`](tg-bot-control/tools/check-bot-isolation.py) | проверка изоляции ботов (шаг CI перед сборкой): сервис не должен читать настройки «активного» бота вместо своего |
 
-> Файл `ПЕРЕДАЧА-КОНТЕКСТА.md` в корне репозитория — это исходная версия
-> из первой выгрузки, она **устарела**. Актуальная — в
-> `tg-bot-control/ПЕРЕДАЧА-КОНТЕКСТА.md`.
+> Устаревшие копии (корневой `ПЕРЕДАЧА-КОНТЕКСТА.md`, `botcontrol-handoff.zip`,
+> неработающий вложенный workflow) удалены в v1.6.3 — они есть в истории git.
+> Восстановление workspace — только из git.
 
 ## Сборка и доставка
 
@@ -46,11 +46,12 @@ Central), поэтому APK собирается в GitHub Actions. Рецеп�
 получение APK из тега — раздел 4 файла
 `tg-bot-control/ПЕРЕДАЧА-КОНТЕКСТА.md`.
 
-Текущая доставка: **v1.6.2 (versionCode 29)**, тег
-`botcontrol-v1.6.2-code29`. Следующий versionCode — **30**.
+Текущая доставка: **v1.6.3 (versionCode 30)**, тег
+`botcontrol-v1.6.3-code30`. Следующий versionCode — **31**.
 
 ## Безопасность
 
-Токены ботов и любые живые ключи в git не попадают (в ораклах из
-`uploads/` они есть — перед коммитом вырезаются). В репозитории лежит
+Токены ботов и любые живые ключи в git не попадают. Исключение из прошлого —
+удалённый `botcontrol-handoff.zip`: токен из него остался в истории git и
+должен быть отозван через @BotFather (`/revoke`). В репозитории лежит
 только debug-keystore для воспроизводимой подписи debug-APK.

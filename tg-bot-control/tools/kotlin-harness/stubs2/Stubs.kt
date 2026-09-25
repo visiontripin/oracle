@@ -9,6 +9,10 @@ class LocalBotStore {
     var keyboardList: List<String> = emptyList()
     var events: List<ScheduleEvent> = emptyList()
     var cooldown = 10
+    /** Мультибот (тест изоляции): профили и расписание по botId. */
+    var profileList: List<BotProfile> = emptyList()
+    var eventsByBot: Map<Long, List<ScheduleEvent>> = emptyMap()
+    suspend fun profiles(): List<BotProfile> = profileList
     var typing = 4
 
     suspend fun llmEnabled(botId: Long = -1L): Boolean = llmOn
@@ -22,5 +26,13 @@ class LocalBotStore {
     suspend fun packs(): List<ReplyPack> = packList
     suspend fun clarifyQuestions(botId: Long = -1L): List<String> = clarifyList
     suspend fun keyboard(botId: Long = -1L): List<String> = keyboardList
-    suspend fun schedule(botId: Long = -1L): List<ScheduleEvent> = events
+    suspend fun schedule(botId: Long = -1L): List<ScheduleEvent> = eventsByBot[botId] ?: events
 }
+
+/** Как в LocalBotStore.kt (сам файл Android-зависим). */
+data class BotProfile(
+    val id: Long = 0L,
+    val name: String = "",
+    val username: String = "",
+    val enabled: Boolean = true,
+)

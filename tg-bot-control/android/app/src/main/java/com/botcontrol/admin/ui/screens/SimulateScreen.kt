@@ -94,14 +94,14 @@ fun SimulateScreen(
                     scope.launch {
                         try {
                             // Имитация — «свежая голова»: без чужого контекста и кулдауна.
-                            ChatMemory.clear(-2L, -1L)
                             val simBotId = localStore.activeBotId()
+                            ChatMemory.clear(simBotId, -1L) // ключ тот же, что у decide ниже
                             trace.add("Настройки поведения: «печатает» ${localStore.typingSeconds(simBotId)} с, " +
                                 "пауза ${localStore.cooldownSec(simBotId)} с, память ${localStore.historyLimit(simBotId)} реплик")
                             val decision: BotDecision = BotBrain.decide(
                                 context = context,
                                 store = localStore,
-                                botId = localStore.activeBotId(),
+                                botId = simBotId,
                                 chatId = -1L,
                                 firstName = "Тестер",
                                 text = message,

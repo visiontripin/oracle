@@ -67,7 +67,8 @@ tg-bot-control/
 │               └── worker/    # StatusWorker (WorkManager)
 ├── docs/CONNECT.md            # подключение приложения к боту
 ├── scripts/                   # run_server.sh build_apk.sh tunnel_*
-└── .github/workflows/android.yml  # CI: сборка debug-APK
+└── tools/                     # kotlin-harness, фикстуры импорта, check-bot-isolation.py
+# CI: /.github/workflows/botcontrol-apk.yml в корне репозитория
 ```
 
 ## API (все обязательные методы)

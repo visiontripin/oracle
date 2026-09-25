@@ -4,5 +4,6 @@ import com.botcontrol.admin.data.local.BotRuleEntity
 
 class BotRepository {
     var rules: List<BotRuleEntity> = emptyList()
-    suspend fun botRules(botId: Long = -1L): List<BotRuleEntity> = rules
+    var rulesByBot: Map<Long, List<BotRuleEntity>> = emptyMap()
+    suspend fun botRules(botId: Long = -1L): List<BotRuleEntity> = rulesByBot[botId] ?: rules
 }

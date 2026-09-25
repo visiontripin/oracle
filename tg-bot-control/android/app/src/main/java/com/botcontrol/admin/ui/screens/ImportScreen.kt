@@ -234,7 +234,7 @@ private suspend fun applyParsed(
         // на него не ссылаются правила/расписание других ботов.
         val foreign = foreignPackRefs(localStore, repository, botId)
         fun mine(p: ReplyPack) =
-            p.ownerBotId == botId || (p.ownerBotId == 0L && !foreign.contains(p.id))
+            p.ownerBotId == botId || (p.ownerBotId == 0L && p.id !in foreign)
         for (imported in parsed.packs) {
             val existing = current.firstOrNull { it.name == imported.name && mine(it) }
             if (existing != null) {
@@ -438,20 +438,19 @@ private suspend fun applyParsed(
     else done.joinToString(", ")
 }
 
-/** Всё, чем другие боты ссылаются на наборы (правила, кнопки, анимации, расписание). */
+/** id наборов, которыми пользуются ДРУГИЕ боты (правила, кнопки, анимации, расписание). */
 private suspend fun foreignPackRefs(
     store: LocalBotStore,
     repository: BotRepository,
     botId: Long,
-): String {
-    val gson = com.google.gson.Gson()
-    val sb = StringBuilder()
+): Set<String> {
+    val out = HashSet<String>()
     for (p in store.profiles()) {
         if (p.id == botId) continue
-        sb.append(gson.toJson(repository.botRules(p.id)))
-        sb.append(gson.toJson(store.schedule(p.id)))
+        out += com.botcontrol.admin.data.SettingsExporter.packRefs(
+            repository.botRules(p.id), store.schedule(p.id))
     }
-    return sb.toString()
+    return out
 }
 
 private fun uniquePackId(base: String, taken: Set<String>): String {

@@ -85,6 +85,31 @@ object SettingsExporter {
     }
 
     /** Все inline-меню бота: какие есть у правил и у событий расписания. */
+    /**
+     * id наборов, на которые ссылается бот: правила «набор», анимации
+     * (финал слот-машины из набора), inline-кнопки правил и событий.
+     * Нужен экспорту (в .py — только свои наборы) и импорту (не трогать
+     * наборы, которыми пользуются другие боты).
+     */
+    fun packRefs(rules: List<BotRuleEntity>, events: List<ScheduleEvent>): Set<String> {
+        val out = HashSet<String>()
+        fun btn(b: InlineBtn) {
+            if (b.packId.isNotBlank()) out.add(b.packId)
+            if (b.action == "anim" && b.script.isNotBlank()) {
+                Anim.decode(b.script).packId.takeIf { it.isNotBlank() }?.let(out::add)
+            }
+        }
+        rules.forEach { r ->
+            if (r.packId.isNotBlank()) out.add(r.packId)
+            if (r.actionType == "anim" && r.script.isNotBlank()) {
+                Anim.decode(r.script).packId.takeIf { it.isNotBlank() }?.let(out::add)
+            }
+            BotJson.menu(r.menu).forEach(::btn)
+        }
+        events.forEach { e -> e.menu.forEach(::btn) }
+        return out
+    }
+
     private fun collectMenus(
         rules: List<BotRuleEntity>,
         events: List<ScheduleEvent>,
@@ -197,9 +222,16 @@ object SettingsExporter {
         // Только наборы ЭТОГО бота: на которые ссылаются его правила/кнопки/
         // анимации/расписание или импортированные для него. Раньше в .py
         // попадала вся библиотека — тексты других ботов.
-        val refs = com.google.gson.Gson().let { g -> g.toJson(rules) + g.toJson(events) }
+        val refs = packRefs(rules, events)
+        val foreignRefs = HashSet<String>()
+        for (p in store.profiles()) {
+            if (p.id != botId) foreignRefs += packRefs(repository.botRules(p.id), store.schedule(p.id))
+        }
         val packs = store.packs().filter {
-            it.items.isNotEmpty() && (it.ownerBotId == botId || refs.contains(it.id))
+            it.items.isNotEmpty() && (
+                it.ownerBotId == botId || it.id in refs ||
+                    // общий набор библиотеки, которым не пользуются другие боты
+                    (it.ownerBotId == 0L && it.id !in foreignRefs))
         }
         val consts = packConsts(packs)
 
