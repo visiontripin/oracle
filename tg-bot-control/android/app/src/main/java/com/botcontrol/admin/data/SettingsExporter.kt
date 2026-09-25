@@ -5,8 +5,10 @@ import com.botcontrol.admin.data.local.BotRuleEntity
 /**
  * Экспорт настроек бота в исходник на Python — ровно в том формате, который
  * читает [ScriptImporter] (тот же файл можно потом импортировать обратно):
- * характер и параметры ИИ, команды и правила с inline-кнопками, клавиатура
- * чата, наборы ответов, уточняющие вопросы, расписание с днями недели.
+ * команды и правила с inline-кнопками И обработчиком нажатий (кнопки после
+ * повторного импорта работают), анимации, клавиатура чата, наборы ответов,
+ * уточняющие вопросы, расписание с днями недели. Блок ИИ — только если ИИ
+ * у бота включён (ИИ — отдельная фича, по умолчанию выключен).
  *
  * Токен в экспорт НЕ попадает — только плейсхолдер.
  */
@@ -38,7 +40,48 @@ object SettingsExporter {
         if (text.isBlank()) return "\"\""
         val lines = text.lineSequence().toList()
         if (lines.size <= 1) return py(text)
-        return "( " + lines.joinToString(" ") { py(it) } + " )"
+        // Каждая строка, кроме последней, — с "\n": раньше переносы терялись,
+        // и после импорта /help превращался в одну длинную строку.
+        return "(\n" + lines.mapIndexed { i, l ->
+            "        " + py(if (i < lines.size - 1) l + "\n" else l)
+        }.joinToString("\n") + "\n    )"
+    }
+
+    /** Константы наборов: id набора → уникальное имя (одно на весь файл). */
+    private fun packConsts(packs: List<ReplyPack>): Map<String, String> {
+        val out = LinkedHashMap<String, String>()
+        val used = HashSet<String>()
+        packs.forEach { p ->
+            var name = packConst(p)
+            var i = 2
+            while (!used.add(name)) name = packConst(p) + "_" + i++
+            out[p.id] = name
+        }
+        return out
+    }
+
+    private fun animConst(owner: String): String =
+        "ANIM_" + owner.replace(Regex("[^A-Za-z0-9]+"), "_").trim('_').uppercase().ifBlank { "X" }
+
+    /**
+     * Вызов помощника анимации: шаблон строкой или константа своих кадров.
+     * Формат читает [ScriptImporter] (animFromCall).
+     */
+    private fun animCall(spec: AnimSpec, chat: String, framesConst: String?, consts: Map<String, String>,
+                         extra: String): String {
+        val args = ArrayList<String>()
+        args.add(chat)
+        // Кадры — всегда готовым списком (файл работает и как обычный бот);
+        // preset= подсказывает BotControl, что это шаблон, и импорт вернёт его.
+        args.add(framesConst ?: "[]")
+        args.add("%.1f".format(java.util.Locale.US, Anim.interval(spec) / 1000.0))
+        if (spec.finalText.isNotBlank()) args.add(py(spec.finalText))
+        if (spec.preset != "custom") args.add("preset=${py(spec.preset)}")
+        if (spec.preset != "custom" && spec.text.isNotBlank()) args.add("text=${py(spec.text)}")
+        if (spec.loops > 1) args.add("loops=${spec.loops}")
+        if (spec.preset == "custom" && spec.mono) args.add("mono=True")
+        consts[spec.packId]?.let { args.add("pack=$it") }
+        return "play_animation(${args.joinToString(", ")}$extra)"
     }
 
     /** Все inline-меню бота: какие есть у правил и у событий расписания. */
@@ -123,25 +166,27 @@ object SettingsExporter {
         sb.appendLine("BOT_TOKEN = \"ВСТАВЬ_ТОКЕН_ОТСЮДА_НЕ_ЭКСПОРТИРУЕТСЯ\"")
         sb.appendLine()
 
-        // ---------- ИИ ----------
+        // ---------- ИИ (только если включён: ИИ — отдельная фича) ----------
+        val aiOn = store.llmEnabled(botId)
         val prompt = store.systemPrompt(botId)
-        if (prompt.isNotBlank()) {
-            sb.appendLine("SYSTEM_PROMPT = (")
-            prompt.lineSequence().forEach { line -> sb.appendLine("    ${py(line)}") }
-            sb.appendLine(")")
+        if (aiOn) {
+            sb.appendLine("# ---------- ИИ: отвечает только на /chat вопрос и правила «ИИ» ----------")
+            if (prompt.isNotBlank()) {
+                val pl = prompt.lines()
+                sb.appendLine("SYSTEM_PROMPT = (")
+                pl.forEachIndexed { i, line -> sb.appendLine("    ${py(if (i < pl.size - 1) line + "\n" else line)}") }
+                sb.appendLine(")")
+                sb.appendLine()
+            }
+            sb.appendLine("LLM_MAX_TOKENS = ${store.aiMaxTokens(botId)}")
+            sb.appendLine("LLM_MAX_TOP_K = ${store.aiTopK(botId)}")
+            sb.appendLine("payload = {")
+            sb.appendLine("    \"temperature\": ${store.aiTemperature(botId)},")
+            sb.appendLine("    \"max_tokens\": LLM_MAX_TOKENS,")
+            sb.appendLine("}")
+            sb.appendLine("MAX_HISTORY = ${store.historyLimit(botId)}")
             sb.appendLine()
         }
-        val temp = store.aiTemperature(botId)
-        val topK = store.aiTopK(botId)
-        val maxTokens = store.aiMaxTokens(botId)
-        sb.appendLine("LLM_MAX_TOKENS = $maxTokens")
-        sb.appendLine("LLM_MAX_TOP_K = $topK")
-        sb.appendLine("payload = {")
-        sb.appendLine("    \"temperature\": $temp,")
-        sb.appendLine("    \"max_tokens\": LLM_MAX_TOKENS,")
-        sb.appendLine("}")
-        sb.appendLine()
-        sb.appendLine("MAX_HISTORY = ${store.historyLimit(botId)}")
         sb.appendLine("ANSWER_COOLDOWN = ${store.cooldownSec(botId)}")
         sb.appendLine("DEFAULT_TYPING_SECONDS = ${store.typingSeconds(botId)}")
         sb.appendLine()
@@ -149,6 +194,65 @@ object SettingsExporter {
         val rules = repository.botRules(botId).filter { it.enabled }
         val events = store.schedule(botId).filter { it.enabled }
         val menus = collectMenus(rules, events)
+        val packs = store.packs().filter { it.items.isNotEmpty() }
+        val consts = packConsts(packs)
+
+        // ---------- анимации: свои кадры → константы + помощник ----------
+        val animFrames = LinkedHashMap<String, List<String>>() // константа → кадры
+        val animConstOf = HashMap<String, String>()             // encode(spec) → константа
+        fun registerAnim(spec: AnimSpec, owner: String) {
+            val key = Anim.encode(spec)
+            if (key in animConstOf) return
+            // шаблон → его кадры одним проходом (повторы делает loops=)
+            val frames = if (spec.preset == "custom") spec.frames
+            else Anim.frames(spec.copy(loops = 1), "{user}", kotlin.random.Random(7))
+            if (frames.isEmpty()) return
+            var name = animConst(owner)
+            var i = 2
+            while (name in animFrames) name = animConst(owner) + "_" + i++
+            animFrames[name] = frames
+            animConstOf[key] = name
+        }
+        var usesAnim = false
+        rules.filter { it.actionType == "anim" }.forEach {
+            usesAnim = true; registerAnim(Anim.decode(it.script), it.pattern)
+        }
+        menus.flatMap { it.second }.filter { it.action == "anim" }.forEach {
+            usesAnim = true; registerAnim(Anim.decode(it.script), it.id.ifBlank { it.label })
+        }
+        if (usesAnim) {
+            sb.appendLine("# ---------- анимация: одно сообщение правится кадр за кадром ----------")
+            listOf(
+                "def play_animation(chat_id, frames, delay=0.7, final=None, reply_markup=None,",
+                "                   message_id=None, loops=1, pack=None, **kw):",
+                "    \"\"\"Одно сообщение правится кадр за кадром. preset=/text=/mono= читает BotControl.\"\"\"",
+                "    frames = list(frames) * max(1, loops)",
+                "    if pack:",
+                "        final = random.choice(pack)",
+                "    m_id = message_id",
+                "    if m_id is None:",
+                "        m_id = bot.send_message(chat_id, frames[0]).message_id",
+                "        frames = frames[1:]",
+                "    for frame in frames:",
+                "        time.sleep(delay)",
+                "        try:",
+                "            bot.edit_message_text(frame, chat_id, m_id)",
+                "        except Exception:",
+                "            pass  # «message is not modified» и т.п.",
+                "    if final:",
+                "        time.sleep(delay)",
+                "        bot.edit_message_text(final, chat_id, m_id, reply_markup=reply_markup)",
+            ).forEach { sb.appendLine(it) }
+            sb.appendLine()
+            sb.appendLine()
+            animFrames.forEach { (name, frames) ->
+                sb.appendLine("$name = [")
+                frames.forEach { sb.appendLine("    ${py(it)},") }
+                sb.appendLine("]")
+                sb.appendLine()
+            }
+        }
+        val ctx = Ctx(menus, consts, animConstOf)
 
         // ---------- клавиатура чата ----------
         val keyboard = store.keyboard(botId)
@@ -164,8 +268,11 @@ object SettingsExporter {
         }
 
         // ---------- правила: команды, кнопки клавиатуры, фразы ----------
-        rules.filter { it.type == "command" }.forEach { rule -> emitRule(sb, rule, menus) }
-        rules.filter { it.type != "command" }.forEach { rule -> emitRule(sb, rule, menus) }
+        rules.filter { it.type == "command" }.forEach { rule -> emitRule(sb, rule, ctx) }
+        rules.filter { it.type != "command" }.forEach { rule -> emitRule(sb, rule, ctx) }
+
+        // ---------- обработчик нажатий: без него кнопки после импорта «немые» ----------
+        emitCallbacks(sb, menus, ctx)
 
         // ---------- inline-меню ----------
         menus.forEach { (name, menu) ->
@@ -176,9 +283,8 @@ object SettingsExporter {
         }
 
         // ---------- наборы ответов ----------
-        val packs = store.packs().filter { it.items.isNotEmpty() }
         packs.forEach { pack ->
-            sb.appendLine("${packConst(pack)} = [")
+            sb.appendLine("${consts[pack.id]} = [")
             pack.items.take(300).forEach { item -> sb.appendLine("    ${py(item)},") }
             sb.appendLine("]")
             sb.appendLine()
@@ -218,12 +324,10 @@ object SettingsExporter {
             sb.appendLine("    schedule = [")
             daily.forEach { sb.appendLine("        ${tuple(it)}") }
             sb.appendLine("    ]")
-            if (weekdays.isNotEmpty() || other.isNotEmpty() || friday.isNotEmpty() ||
-                monThu.isNotEmpty()) {
+            if (weekdays.isNotEmpty() || friday.isNotEmpty() || monThu.isNotEmpty()) {
                 sb.appendLine("    if wd < 5:")
                 sb.appendLine("        schedule.extend([")
                 weekdays.forEach { sb.appendLine("            ${tuple(it)}") }
-                other.forEach { sb.appendLine("            ${tuple(it)}  # свой набор дней") }
                 sb.appendLine("        ])")
                 if (friday.isNotEmpty()) {
                     sb.appendLine("        if wd == 4:")
@@ -235,11 +339,25 @@ object SettingsExporter {
                         sb.appendLine("            ])")
                     }
                 } else if (monThu.isNotEmpty()) {
-                    sb.appendLine("        else:")
+                    sb.appendLine("        if wd != 4:")
                     sb.appendLine("            schedule.extend([")
                     monThu.forEach { sb.appendLine("                ${tuple(it)}") }
                     sb.appendLine("            ])")
                 }
+            }
+            // Свои наборы дней (выходные, Пн+Ср, …): отдельный блок на набор,
+            // иначе после импорта они молча становились буднями.
+            other.groupBy { it.days.sorted() }.forEach { (days, list) ->
+                val wds = days.map { it - 1 }
+                val cond = when {
+                    wds == listOf(5, 6) -> "wd >= 5"
+                    wds.size == 1 -> "wd == ${wds[0]}"
+                    else -> "wd in (${wds.joinToString(", ")})"
+                }
+                sb.appendLine("    if $cond:")
+                sb.appendLine("        schedule.extend([")
+                list.forEach { sb.appendLine("            ${tuple(it)}") }
+                sb.appendLine("        ])")
             }
             sb.appendLine("    return sorted(schedule, key=lambda item: (item[0], item[1]))")
             sb.appendLine()
@@ -249,24 +367,93 @@ object SettingsExporter {
         return sb.toString()
     }
 
-    private fun emitRule(sb: StringBuilder, rule: BotRuleEntity, menus: List<Pair<String, List<InlineBtn>>>) {
+    private class Ctx(
+        val menus: List<Pair<String, List<InlineBtn>>>,
+        val consts: Map<String, String>,
+        val animConstOf: Map<String, String>,
+    )
+
+    private fun packExpr(packId: String, ctx: Ctx): String =
+        ctx.consts[packId]?.let { "random.choice($it)" } ?: py("(набор $packId не найден)")
+
+    /**
+     * @bot.callback_query_handler — по ветке на каждую кнопку с действием.
+     * Формат совпадает с тем, что понимает [ScriptImporter]: всплывашка
+     * (answer_callback_query), флаг reminders_running = True/False,
+     * random.choice(НАБОР), edit_message_text / send_message, play_animation.
+     */
+    private fun emitCallbacks(sb: StringBuilder, menus: List<Pair<String, List<InlineBtn>>>, ctx: Ctx) {
+        val seen = HashSet<String>()
+        val btns = menus.flatMap { it.second }.filter { !it.isUrl && it.action != "url" }
+            .filter { seen.add(it.id.ifBlank { it.label }) }
+        if (btns.isEmpty()) return
+        sb.appendLine("reminders_running = False")
+        sb.appendLine()
+        sb.appendLine()
+        sb.appendLine("@bot.callback_query_handler(func=lambda call: True)")
+        sb.appendLine("def on_callback(call):")
+        sb.appendLine("    global reminders_running")
+        sb.appendLine("    chat_id = call.message.chat.id")
+        btns.forEachIndexed { i, b ->
+            val id = b.id.ifBlank { b.label }
+            sb.appendLine("    ${if (i == 0) "if" else "elif"} call.data == ${py(id)}:")
+            val mid = "call.message.message_id"
+            fun toast(t: String) { if (t.isNotBlank()) sb.appendLine("        bot.answer_callback_query(call.id, ${py(t)})") }
+            when (b.action) {
+                "reminders_on", "reminders_off" -> {
+                    val on = b.action == "reminders_on"
+                    sb.appendLine("        if ${if (on) "" else "not "}reminders_running:")
+                    sb.appendLine("            bot.answer_callback_query(call.id, ${py(b.toastNoChange.ifBlank { if (on) "Уже работает" else "Уже остановлено" })})")
+                    sb.appendLine("            return")
+                    sb.appendLine("        reminders_running = ${if (on) "True" else "False"}")
+                    toast(b.toast)
+                    val t = b.text.ifBlank { if (on) "▶️ Напоминания включены." else "⏹ Напоминания выключены." }
+                    sb.appendLine("        bot.edit_message_text(${textExpression(t)}, chat_id, $mid)")
+                }
+                "pack" -> {
+                    toast(b.toast)
+                    if (b.edit) sb.appendLine("        bot.edit_message_text(${packExpr(b.packId, ctx)}, chat_id, $mid)")
+                    else sb.appendLine("        bot.send_message(chat_id, ${packExpr(b.packId, ctx)})")
+                }
+                "script" -> {
+                    toast(b.toast)
+                    sb.appendLine("        bot.send_message(chat_id, run_script(${py(b.script.take(4000))}))")
+                }
+                "anim" -> {
+                    toast(b.toast)
+                    val spec = Anim.decode(b.script)
+                    sb.appendLine("        " + animCall(spec, "chat_id", ctx.animConstOf[Anim.encode(spec)], ctx.consts,
+                        if (b.edit) ", message_id=$mid, reply_markup=call.message.reply_markup" else ""))
+                }
+                "dice" -> {
+                    toast(b.toast)
+                    sb.appendLine("        bot.send_dice(chat_id, emoji=${py(b.text.ifBlank { "🎲" })})")
+                }
+                else -> {
+                    toast(b.toast)
+                    val t = textExpression(b.text.ifBlank { b.label })
+                    if (b.edit) sb.appendLine("        bot.edit_message_text($t, chat_id, $mid)")
+                    else sb.appendLine("        bot.send_message(chat_id, $t)")
+                }
+            }
+        }
+        sb.appendLine()
+        sb.appendLine()
+    }
+
+    private fun emitRule(sb: StringBuilder, rule: BotRuleEntity, ctx: Ctx) {
         ruleHeader(rule).forEach { sb.appendLine(it) }
-        val menuName = menus.firstOrNull { (_, m) ->
+        val menuName = ctx.menus.firstOrNull { (_, m) ->
             m.isNotEmpty() && m.map { it.id }.toSet() == BotJson.menu(rule.menu).map { it.id }.toSet()
         }?.first
         val kbArg = if (menuName != null) ", reply_markup=$menuName()" else ""
         when (rule.actionType) {
-            "pack" -> {
-                val pack = runCatching {
-                    // имя набора для экспорта: берём константу из списка
-                    rule.packId.removePrefix("pack_")
-                }.getOrDefault(rule.packId)
-                sb.appendLine("    bot.send_message(msg.chat.id, random.choice(${
-                    Regex("^[A-Za-z_][A-Za-z0-9_]*$").let { re ->
-                        if (re.matches(pack)) pack.uppercase() else pack
-                    }
-                })$kbArg)")
+            "pack" -> sb.appendLine("    bot.send_message(msg.chat.id, ${packExpr(rule.packId, ctx)}$kbArg)")
+            "anim" -> {
+                val spec = Anim.decode(rule.script)
+                sb.appendLine("    " + animCall(spec, "msg.chat.id", ctx.animConstOf[Anim.encode(spec)], ctx.consts, kbArg))
             }
+            "dice" -> sb.appendLine("    bot.send_dice(msg.chat.id, emoji=${py(rule.responseText.trim().ifBlank { "🎲" })})")
             "llm" -> sb.appendLine("    bot.send_message(msg.chat.id, ask_llm(msg.chat.id, msg.text)$kbArg)")
             "script" -> sb.appendLine("    bot.send_message(msg.chat.id, run_script(${
                 py(rule.script.take(4000))

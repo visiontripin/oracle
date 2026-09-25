@@ -349,6 +349,16 @@ class LocalBotService : Service() {
             trace = { DeviceLlm.log("   • $it") },
         )
         DeviceLlm.log("💬 Источник: ${decision.source}; ответ: '${decision.reply.take(60)}'")
+        decision.anim?.let { spec ->
+            val items = store.packs().firstOrNull { it.id == spec.packId }?.items.orEmpty()
+            AnimPlayer.play(scope, api, botId, msg.chatId, spec, msg.firstName, items, decision.menu)
+            return
+        }
+        if (decision.dice.isNotBlank()) {
+            api.sendDice(msg.chatId, decision.dice)
+                .onFailure { DeviceLlm.log("❌ Кубик не отправлен: ${it.message?.take(120)}") }
+            return
+        }
         if (decision.reply.isBlank()) return
         // Для ответа ИИ «печатает…» уже показано во время генерации — не дублируем паузу.
         if (decision.source != "ИИ") withTyping(api, store, botId, msg.chatId)
@@ -484,6 +494,19 @@ class LocalBotService : Service() {
                     },
                     inlineMenu = menu,
                 )
+            }
+            "anim" -> {
+                // «Править это сообщение» — анимация прямо в сообщении под
+                // кнопкой (текстовые квесты, флипбук), иначе новым сообщением.
+                val spec = com.botcontrol.admin.data.Anim.decode(btn.script)
+                val items = store.packs().firstOrNull { it.id == spec.packId }?.items.orEmpty()
+                AnimPlayer.play(scope, api, botId, cb.chatId, spec, cb.firstName, items,
+                    menu = if (btn.edit) menu else emptyList(),
+                    editMessageId = if (btn.edit) cb.messageId else null)
+            }
+            "dice" -> {
+                api.sendDice(cb.chatId, btn.text.trim().ifBlank { "🎲" })
+                    .onFailure { DeviceLlm.log("❌ Кубик не отправлен: ${it.message?.take(120)}") }
             }
             "url" -> {
                 // Кнопка-ссылка: Telegram сам открывает url, боту делать

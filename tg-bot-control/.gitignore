@@ -20,6 +20,7 @@ android/gradle/wrapper/gradle-wrapper.jar
 
 # Kotlin-харнесс
 out/
+out*/
 out2/
 out3/
 out4/

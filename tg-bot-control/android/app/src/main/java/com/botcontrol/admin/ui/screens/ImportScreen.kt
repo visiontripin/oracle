@@ -32,6 +32,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import com.botcontrol.admin.data.Anim
 import com.botcontrol.admin.data.BotJson
 import com.botcontrol.admin.data.BotRepository
 import com.botcontrol.admin.data.InlineBtn
@@ -184,7 +185,7 @@ fun ImportScreen(
                             style = MaterialTheme.typography.titleSmall,
                             color = MaterialTheme.colorScheme.tertiary)
                         p.warnings.forEach { w ->
-                            Text("⚠️ $w", style = MaterialTheme.typography.bodySmall,
+                            Text(if (w.startsWith("ℹ️")) w else "⚠️ $w", style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant)
                             Spacer(Modifier.height(2.dp))
                         }
@@ -242,8 +243,14 @@ private suspend fun applyParsed(
     }
 
     fun packId(raw: String): String = packIdMap[raw] ?: raw.removePrefix("imp_")
+    /** Набор внутри анимации (слот-машина берёт финал из набора). */
+    fun animFixed(script: String): String {
+        val spec = Anim.decode(script)
+        return if (spec.packId.startsWith("imp_")) Anim.encode(spec.copy(packId = packId(spec.packId))) else script
+    }
     fun buttonsFixed(list: List<InlineBtn>): List<InlineBtn> = list.map { b ->
-        if (b.packId.startsWith("imp_")) b.copy(packId = packId(b.packId)) else b
+        val withPack = if (b.packId.startsWith("imp_")) b.copy(packId = packId(b.packId)) else b
+        if (withPack.action == "anim") withPack.copy(script = animFixed(withPack.script)) else withPack
     }
 
     // ---------- характер и параметры ИИ ----------
@@ -278,7 +285,15 @@ private suspend fun applyParsed(
             "pack" -> "pack"
             "llm" -> "llm"
             "script" -> "script"
+            "anim" -> "anim"
+            "dice" -> "dice"
             else -> "text"
+        }
+        val ruleScript = if (action == "anim") animFixed(imp.script) else imp.script
+        val ruleText = when (action) {
+            "text" -> imp.text
+            "dice" -> imp.text.ifBlank { "🎲" } // эмодзи кубика
+            else -> ""
         }
         val packForRule = if (action == "pack") packId(imp.packId) else ""
         if (action == "text" && imp.text.isBlank()) continue // пустой текст — нечего сохранять
@@ -296,9 +311,9 @@ private suspend fun applyParsed(
             existing.copy(
                 type = imp.type,
                 actionType = action,
-                responseText = if (action == "text") imp.text else "",
+                responseText = ruleText,
                 packId = packForRule,
-                script = imp.script,
+                script = ruleScript,
                 menu = BotJson.save(menu.withIds()),
             )
         } else {
@@ -307,9 +322,9 @@ private suspend fun applyParsed(
                 type = imp.type,
                 pattern = imp.pattern,
                 actionType = action,
-                responseText = if (action == "text") imp.text else "",
+                responseText = ruleText,
                 packId = packForRule,
-                script = imp.script,
+                script = ruleScript,
                 menu = BotJson.save(menu.withIds()),
             )
         }

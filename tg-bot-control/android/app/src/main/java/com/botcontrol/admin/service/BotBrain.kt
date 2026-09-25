@@ -17,6 +17,10 @@ data class BotDecision(
     val source: String,   // правило / скрипт / набор / ИИ / уточняющий вопрос / запасной ответ / кулдаун
     val reply: String,    // текст ответа (пусто = молчать)
     val menu: List<InlineBtn> = emptyList(),
+    /** Анимация правкой сообщения (правило с действием «Анимация»). */
+    val anim: com.botcontrol.admin.data.AnimSpec? = null,
+    /** Кубик Telegram (sendDice): 🎲 🎯 🏀 ⚽ 🎳 🎰. */
+    val dice: String = "",
 )
 
 /**
@@ -124,6 +128,21 @@ object BotBrain {
                                 "Ошибка скрипта: ${it.message?.take(140)}", parseMenu(rule.menu))
                         },
                     )
+                }
+                "anim" -> {
+                    val spec = com.botcontrol.admin.data.Anim.decode(rule.script)
+                    trace?.invoke("Действие правила: анимация «${com.botcontrol.admin.data.Anim.preset(spec.preset).title}»")
+                    val items = packs.firstOrNull { it.id == spec.packId }?.items.orEmpty()
+                    val final = com.botcontrol.admin.data.Anim.final(spec, firstName, items)
+                    BotDecision("анимация «${rule.pattern}»",
+                        final.ifBlank { com.botcontrol.admin.data.Anim.frames(spec, firstName).lastOrNull().orEmpty() }
+                            .ifBlank { "🎞" },
+                        parseMenu(rule.menu), anim = spec)
+                }
+                "dice" -> {
+                    val emoji = rule.responseText.trim().ifBlank { "🎲" }
+                    trace?.invoke("Действие правила: кубик Telegram $emoji")
+                    BotDecision("кубик «${rule.pattern}»", emoji, parseMenu(rule.menu), dice = emoji)
                 }
                 "pack" -> {
                     val reply = randomFrom(packs, rule.packId)

@@ -221,6 +221,53 @@ class TelegramApi(private val token: String) {
         }
     }
 
+    /**
+     * Сообщение в чат с возвратом message_id — первый кадр анимации, который
+     * потом правится editMessageText. [parseMode] = "HTML" для <pre>-кадров.
+     */
+    suspend fun sendMessageForId(
+        chatId: Long,
+        text: String,
+        parseMode: String? = null,
+        inlineMenu: List<InlineBtn> = emptyList(),
+    ): Result<Int> = withContext(Dispatchers.IO) {
+        try {
+            val payloadMap = mutableMapOf<String, Any>("chat_id" to chatId, "text" to text.take(4000))
+            if (parseMode != null) payloadMap["parse_mode"] = parseMode
+            if (inlineMenu.isNotEmpty()) {
+                payloadMap["reply_markup"] = Gson().toJson(
+                    mapOf("inline_keyboard" to inlineMenu.layoutRows().map { r -> r.map { it.toApi() } }))
+            }
+            val payload = Gson().toJson(payloadMap).toRequestBody(json)
+            fastClient.newCall(Request.Builder().url(url("sendMessage")).post(payload).build())
+                .execute().use { resp ->
+                    val body = resp.body?.string().orEmpty()
+                    if (!resp.isSuccessful) error("sendMessage HTTP ${resp.code}: ${body.take(300)}")
+                    Result.success(parse(body) { it.getAsJsonObject("result")?.get("message_id")?.asInt ?: 0 })
+                }
+        } catch (e: Throwable) {
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Анимированный эмодзи Telegram со случайным значением (sendDice):
+     * 🎲 🎯 🏀 ⚽ 🎳 🎰. Значение выбирает сам Telegram.
+     */
+    suspend fun sendDice(chatId: Long, emoji: String = "🎲"): Result<Unit> = withContext(Dispatchers.IO) {
+        try {
+            val payload = Gson().toJson(mapOf("chat_id" to chatId, "emoji" to emoji)).toRequestBody(json)
+            fastClient.newCall(Request.Builder().url(url("sendDice")).post(payload).build())
+                .execute().use { resp ->
+                    val body = resp.body?.string().orEmpty()
+                    if (resp.isSuccessful) Result.success(Unit)
+                    else Result.failure(IllegalStateException("sendDice HTTP ${resp.code}: ${body.take(200)}"))
+                }
+        } catch (e: Throwable) {
+            Result.failure(e)
+        }
+    }
+
     /** file_path файла по его file_id (для скачивания). */
     suspend fun getFile(fileId: String): Result<String> = withContext(Dispatchers.IO) {
         try {
@@ -424,6 +471,7 @@ class TelegramApi(private val token: String) {
         messageId: Int,
         text: String,
         inlineMenu: List<InlineBtn> = emptyList(),
+        parseMode: String? = null,
     ): Result<Unit> = withContext(Dispatchers.IO) {
         try {
             val payloadMap = mutableMapOf<String, Any>(
@@ -431,6 +479,7 @@ class TelegramApi(private val token: String) {
                 "message_id" to messageId,
                 "text" to text.take(4000),
             )
+            if (parseMode != null) payloadMap["parse_mode"] = parseMode
             if (inlineMenu.isNotEmpty()) {
                 payloadMap["reply_markup"] = Gson().toJson(
                     mapOf("inline_keyboard" to inlineMenu.layoutRows().map { r -> r.map { it.toApi() } }))
@@ -438,8 +487,10 @@ class TelegramApi(private val token: String) {
             val payload = Gson().toJson(payloadMap).toRequestBody(json)
             fastClient.newCall(Request.Builder().url(url("editMessageText")).post(payload).build())
                 .execute().use { resp ->
+                    // Текст ответа нужен анимации: 429 → retry_after, 400 → «not modified».
+                    val body = resp.body?.string().orEmpty()
                     if (resp.isSuccessful) Result.success(Unit)
-                    else Result.failure(IllegalStateException("editMessageText HTTP ${resp.code}"))
+                    else Result.failure(IllegalStateException("editMessageText HTTP ${resp.code}: ${body.take(300)}"))
                 }
         } catch (e: Throwable) {
             Result.failure(e)

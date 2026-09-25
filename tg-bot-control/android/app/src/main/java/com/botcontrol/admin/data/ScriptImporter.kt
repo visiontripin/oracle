@@ -17,6 +17,9 @@ import com.botcontrol.admin.data.PySource.PyExpr
  *    → действие кнопки: текст, случайное из набора, вкл/выкл напоминаний
  *    (`bot_running = True/False`), правка сообщения, всплывашка;
  *  • клавиатура чата (ReplyKeyboardMarkup / KeyboardButton);
+ *  • анимации правкой сообщения: помощник `play_animation(chat, КАДРЫ, 0.5,
+ *    "итог")` или цикл `for кадр in КАДРЫ: … edit_message_text(кадр …)` с
+ *    `time.sleep(N)` → действие «Анимация»; `send_dice(…, emoji="🎯")` → «Кубик»;
  *  • наборы ответов (списки строк) и расписание с зонами дней недели
  *    (`if wd < 5:` / `if wd == 4:` / `else:` / `if wd in (5, 6):` …),
  *    4-й элемент кортежа события — функция меню под напоминанием.
@@ -30,7 +33,7 @@ object ScriptImporter {
     data class ImportedRule(
         val type: String,          // command | button | contains
         val pattern: String,       // "/start" | надпись кнопки | фраза
-        val actionType: String,    // text | pack | llm | script
+        val actionType: String,    // text | pack | llm | script | anim | dice
         val text: String = "",
         val packId: String = "",
         val script: String = "",
@@ -134,6 +137,8 @@ object ScriptImporter {
                 "pack" -> "случайное из ${r.packId.removePrefix("imp_")}"
                 "llm" -> "ответ ИИ"
                 "script" -> "скрипт JS"
+                "anim" -> "анимация: " + Anim.describe(Anim.decode(r.script))
+                "dice" -> "кубик ${r.text}"
                 else -> "текст (${r.text.length} симв.)"
             }
             val btns = if (r.menu.isNotEmpty())
@@ -152,7 +157,19 @@ object ScriptImporter {
     const val SEC_CHANNEL = "channel"
 
     /** Главная точка входа: текст исходника → найденные настройки. */
-    fun parse(source: String): Parsed = Parser(source).run()
+    fun parse(source: String): Parsed = Parser(decodeEntities(source)).run()
+
+    /**
+     * Код, скопированный из браузера/мессенджера, часто приходит с
+     * HTML-сущностями: `if wd &lt; 5:` вместо `if wd < 5:` — и зоны дней
+     * недели не распознавались (ПЕРЕКУРы становились ежедневными).
+     */
+    fun decodeEntities(source: String): String {
+        if (!source.contains('&')) return source
+        return source.replace("&lt;", "<").replace("&gt;", ">").replace("&quot;", "\"")
+            .replace("&#39;", "'").replace("&#x27;", "'").replace("&nbsp;", " ")
+            .replace("&amp;", "&")
+    }
 
     /** Человекочитаемое имя набора из имени константы: JOKES → «📦 Jokes». */
     fun humanize(constName: String): String =
@@ -190,6 +207,8 @@ private class Parser(source: String) {
     private data class Keyboard(val inline: Boolean, val rows: List<List<KbButton>>)
 
     private val packHelpers = HashMap<String, String>()
+    /** Функции-помощники анимации: цикл + edit_message_text внутри. */
+    private val animHelpers = HashSet<String>()
     private val helpers = HashMap<String, Helper>()
     private val keyboards = LinkedHashMap<String, Keyboard>()
     private val attachedKeyboards = HashSet<String>()
@@ -198,7 +217,7 @@ private class Parser(source: String) {
     private val cbBranches = LinkedHashMap<String, Branch>()
 
     private data class Action(
-        val kind: String = "none",   // text | pack | llm | script | on | off | none
+        val kind: String = "none",   // text | pack | llm | script | on | off | anim | dice | none
         val text: String = "",
         val pack: String = "",
         val script: String = "",
@@ -206,6 +225,7 @@ private class Parser(source: String) {
         val toast: String = "",
         val toastNoChange: String = "",
         val markup: MarkupRef? = null,
+        val anim: AnimSpec? = null,
     )
 
     /** Ссылка на клавиатуру из reply_markup: функция или локальная разметка. */
@@ -283,13 +303,19 @@ private class Parser(source: String) {
         val referencedPacks = HashSet<String>()
         (rules.map { it.packId } + (rules.flatMap { it.menu } + schedule.flatMap { it.menu }).map { it.packId })
             .filter { it.startsWith("imp_") }.forEach { referencedPacks.add(it.removePrefix("imp_")) }
+        // набор внутри анимации (pack= у play_animation)
+        (rules.filter { it.actionType == "anim" }.map { it.script } +
+            (rules.flatMap { it.menu } + schedule.flatMap { it.menu }).filter { it.action == "anim" }.map { it.script })
+            .map { Anim.decode(it).packId }.filter { it.startsWith("imp_") }
+            .forEach { referencedPacks.add(it.removePrefix("imp_")) }
 
         val clarifyName = listOf("CLARIFY_QUESTIONS", "CLARIFY").firstOrNull { it in listConsts }
             ?: listConsts.keys.firstOrNull { it.startsWith("CLARIFY") }
         val packs = listConsts.filter { (name, items) ->
             name != clarifyName && (name in referencedPacks ||
                 (items.size >= 2 && name.lowercase() !in ScriptImporter.SERVICE_LIST_NAMES &&
-                    name == name.uppercase()))
+                    name == name.uppercase() && name !in animFrameNames &&
+                    !name.startsWith("ANIM_") && !name.endsWith("_FRAMES")))
         }.map { (name, items) ->
             ReplyPack(id = "imp_$name", name = listTitles[name] ?: ScriptImporter.humanize(name),
                 items = items.take(500))
@@ -369,6 +395,12 @@ private class Parser(source: String) {
                 continue
             }
             val inner = src.calls(bs, be)
+            // def play_animation(chat_id, frames, delay, final): for f in frames: … edit_message_text
+            if (Regex("""(?m)^\s*for\s+\w+\s+in\s""").containsMatchIn(body) &&
+                inner.any { it.shortFn == "edit_message_text" || it.fn.endsWith(".edit_text") }) {
+                animHelpers.add(f.name)
+                continue
+            }
             fun paramIndex(e: PyExpr?): Int =
                 (e as? PyExpr.Name)?.let { n -> f.params.indexOf(n.id) } ?: -1
             fun markupOf(c: PyExpr.Call): Pair<Int, String?> {
@@ -702,6 +734,8 @@ private class Parser(source: String) {
         class Flag(off: Int, val value: Boolean) : Ev(off)
         class Llm(off: Int) : Ev(off)
         class Script(off: Int, val code: String) : Ev(off)
+        class Anim(off: Int, val spec: AnimSpec, val markup: PyExpr?, val edit: Boolean) : Ev(off)
+        class Dice(off: Int, val emoji: String) : Ev(off)
     }
 
     private val runLikeRe = Regex("""(?i)(run|remind|schedul|active|enabled|started|working|notif|alarm|paused)""")
@@ -735,6 +769,12 @@ private class Parser(source: String) {
                 if (!seen.add(c.start)) continue
                 val h = helpers[c.fn] ?: helpers[c.shortFn]
                 when {
+                    c.fn in animHelpers || c.shortFn in animHelpers ->
+                        animFromCall(c, f)?.let { evs.add(it) }
+                    c.shortFn == "send_dice" -> {
+                        val e = strOf(c.kwargs["emoji"] ?: c.args.getOrNull(1), f).orEmpty()
+                        evs.add(Ev.Dice(c.start, e.ifBlank { "🎲" }))
+                    }
                     c.shortFn == "answer_callback_query" ->
                         strOf(c.arg(1, "text"), f)?.let { evs.add(Ev.Toast(c.start, it)) }
                     h?.kind == Kind.TOAST -> strOf(c.args.getOrNull(h.textIndex), f)?.let { evs.add(Ev.Toast(c.start, it)) }
@@ -764,6 +804,16 @@ private class Parser(source: String) {
                 val nxt = evs.getOrNull(i + 1)
                 toasts.add(Ev.Toast(ev.off, ev.text, nxt is Ev.Return))
             }
+        }
+        // Анимация: вызов помощника или цикл правок прямо в обработчике.
+        val anim = evs.filterIsInstance<Ev.Anim>().firstOrNull() ?: inlineAnim(f, ranges, evs)
+        if (anim != null) {
+            return Action(kind = "anim", anim = anim.spec, edit = anim.edit,
+                toast = toasts.firstOrNull()?.text.orEmpty(),
+                markup = markupRef(anim.markup, null, f))
+        }
+        evs.filterIsInstance<Ev.Dice>().firstOrNull()?.let { d ->
+            return Action(kind = "dice", text = d.emoji, toast = toasts.firstOrNull()?.text.orEmpty())
         }
         val flag = evs.filterIsInstance<Ev.Flag>().lastOrNull()
         if (flag != null) {
@@ -877,10 +927,14 @@ private class Parser(source: String) {
     private fun ruleFromAction(a: Action, menu: List<InlineBtn>): ScriptImporter.ImportedRule =
         ScriptImporter.ImportedRule(
             type = "command", pattern = "",
-            actionType = when (a.kind) { "pack" -> "pack"; "llm" -> "llm"; "script" -> "script"; else -> "text" },
-            text = if (a.kind == "text" || a.kind == "none" || a.kind == "on" || a.kind == "off") a.text else "",
+            actionType = when (a.kind) {
+                "pack" -> "pack"; "llm" -> "llm"; "script" -> "script"; "anim" -> "anim"; "dice" -> "dice"
+                else -> "text"
+            },
+            text = if (a.kind == "text" || a.kind == "none" || a.kind == "on" || a.kind == "off" ||
+                a.kind == "dice") a.text else "",
             packId = if (a.kind == "pack") "imp_${a.pack}" else "",
-            script = a.script,
+            script = if (a.kind == "anim" && a.anim != null) Anim.encode(a.anim) else a.script,
             menu = menu,
         )
 
@@ -910,6 +964,20 @@ private class Parser(source: String) {
                 val id = (b.callback ?: label).take(64)
                 val act = callbackAction(id)
                 if (act == null) {
+                    // Штатные кнопки без обработчика (частый случай в экспортах и
+                    // коротких конфигах): start/stop → вкл/выкл напоминаний.
+                    val builtin = builtinToggle(id)
+                    if (builtin != null) {
+                        warnings.add("ℹ️ Кнопка «$label» (callback_data=\"$id\"): обработчика нет — " +
+                            "назначено штатное «${if (builtin) "включить" else "выключить"} напоминания»")
+                        out.add(InlineBtn(id = id, label = label,
+                            toast = if (builtin) "Запущено" else "Остановлено",
+                            action = if (builtin) "reminders_on" else "reminders_off",
+                            text = if (builtin) "▶️ Напоминания включены." else "⏹ Напоминания выключены.",
+                            toastNoChange = if (builtin) "Уже работает" else "Уже остановлено",
+                            row = r + 1))
+                        return@forEach
+                    }
                     warnings.add("Кнопка «$label» (callback_data=\"$id\"): обработчик нажатия не найден — задай действие после импорта")
                     out.add(InlineBtn(id = id, label = label, action = "text", row = r + 1))
                     return@forEach
@@ -927,6 +995,10 @@ private class Parser(source: String) {
                         packId = "imp_${act.pack}", edit = act.edit, row = r + 1)
                     "script" -> InlineBtn(id = id, label = label, toast = act.toast, action = "script",
                         script = act.script, row = r + 1)
+                    "anim" -> InlineBtn(id = id, label = label, toast = act.toast, action = "anim",
+                        script = act.anim?.let { Anim.encode(it) }.orEmpty(), edit = act.edit, row = r + 1)
+                    "dice" -> InlineBtn(id = id, label = label, toast = act.toast, action = "dice",
+                        text = act.text, row = r + 1)
                     "llm" -> {
                         warnings.add("Кнопка «$label» отвечает через ИИ — для кнопок это пока не поддерживается, задай текст")
                         InlineBtn(id = id, label = label, toast = act.toast, action = "text", row = r + 1)
@@ -937,6 +1009,110 @@ private class Parser(source: String) {
             }
         }
         return out
+    }
+
+    /** start/stop-подобные callback_data → true (вкл) / false (выкл) / null. */
+    private fun builtinToggle(id: String): Boolean? = when (id.lowercase()) {
+        "start", "run", "on", "resume", "go", "reminders_on", "remind_on" -> true
+        "stop", "off", "pause", "reminders_off", "remind_off" -> false
+        else -> null
+    }
+
+    /** Списки, которые оказались кадрами анимации, — это не наборы ответов. */
+    private val animFrameNames = HashSet<String>()
+
+    /** Кадры из выражения: список-константа или литерал списка строк. */
+    private fun framesOf(e: PyExpr?, f: PySource.PyFunc): List<String>? = when (e) {
+        is PyExpr.Name -> listConsts[e.id]?.also { animFrameNames.add(e.id) }
+            ?: (localExpr(f, e.id, e.start) as? PyExpr.Seq)?.items?.mapNotNull { (it as? PyExpr.Str)?.value }
+        is PyExpr.Seq -> e.items.mapNotNull { (it as? PyExpr.Str)?.value }.ifEmpty { null }
+        else -> null
+    }
+
+    /**
+     * play_animation(chat_id, FRAMES, 0.5, "итог", reply_markup=kb()) или с
+     * ключами frames= / delay= / interval= / final= / preset= / text= / loops=.
+     * Вместо кадров можно имя шаблона строкой: "spinner", "progress", …
+     */
+    private fun animFromCall(c: PyExpr.Call, f: PySource.PyFunc): Ev.Anim? {
+        var frames: List<String>? = framesOf(c.kwargs["frames"], f)
+        var preset: String? = strOf(c.kwargs["preset"], f)?.takeIf { p -> Anim.PRESETS.any { it.id == p } }
+        var delay: Double? = (c.kwargs["delay"] ?: c.kwargs["interval"] ?: c.kwargs["seconds"])
+            .let { (it as? PyExpr.Num)?.value }
+        var final: String? = strOf(c.kwargs["final"] ?: c.kwargs["final_text"], f)
+        val text: String = strOf(c.kwargs["text"] ?: c.kwargs["label"], f).orEmpty()
+        val loops = ((c.kwargs["loops"] ?: c.kwargs["repeat"]) as? PyExpr.Num)?.value?.toInt() ?: 1
+        // pack=НАБОР — финал из набора (слот-машина); mono=True — моноширинно
+        val packId = when (val pk = c.kwargs["pack"]) {
+            is PyExpr.Name -> "imp_${pk.id}"
+            is PyExpr.Str -> pk.value.trim().takeIf { it.isNotBlank() }?.let { "imp_$it" }
+            else -> null
+        }.orEmpty()
+        val monoKw = (c.kwargs["mono"] as? PyExpr.Const)?.value
+        for (a in c.args) {
+            when {
+                frames == null && preset == null && framesOf(a, f) != null -> frames = framesOf(a, f)
+                a is PyExpr.Num && delay == null -> delay = a.value
+                a is PyExpr.Str || (a is PyExpr.Name && a.id in strConsts) -> {
+                    val v = strOf(a, f).orEmpty()
+                    if (frames == null && preset == null && Anim.PRESETS.any { it.id == v }) preset = v
+                    else if (final == null) final = v
+                }
+            }
+        }
+        if (frames.isNullOrEmpty() && preset == null) return null
+        val base = Anim.preset(preset ?: "custom")
+        val spec = AnimSpec(
+            preset = preset ?: "custom",
+            text = text.ifBlank { if (preset != null) base.defaultText else "" },
+            frames = frames.orEmpty().map { normalizeText(it) },
+            intervalMs = ((delay ?: (base.defaultInterval / 1000.0)) * 1000).toInt()
+                .coerceIn(Anim.MIN_INTERVAL, Anim.MAX_INTERVAL),
+            loops = loops.coerceIn(1, 10),
+            finalText = final?.let { normalizeText(it) }.orEmpty(),
+            mono = monoKw ?: if (preset != null) base.mono else frames.orEmpty().any { '\n' in it },
+            packId = packId,
+        )
+        val edit = c.kwargs.containsKey("message_id")
+        return Ev.Anim(c.start, spec, c.kwargs["reply_markup"], edit)
+    }
+
+    /**
+     * Цикл прямо в обработчике:
+     *   m = bot.send_message(chat, FRAMES[0])
+     *   for frame in FRAMES[1:]: time.sleep(0.5); bot.edit_message_text(frame, chat, m.message_id)
+     *   bot.edit_message_text("итог", chat, m.message_id, reply_markup=kb())
+     */
+    private fun inlineAnim(f: PySource.PyFunc, ranges: List<IntRange>, evs: List<Ev>): Ev.Anim? {
+        if (ranges.isEmpty()) return null
+        // Строки тела идут отдельными диапазонами, а цикл и правка кадра —
+        // на разных строках: смотрим весь участок обработчика целиком.
+        val span = ranges.minOf { it.first }..ranges.maxOf { it.last }
+        for (r in listOf(span)) {
+            val m = src.masked.substring(r.first, r.last + 1)
+            val loop = Regex("""(?m)^\s*for\s+(\w+)\s+in\s+([A-Za-z_]\w*)""").find(m) ?: continue
+            val loopVar = loop.groupValues[1]
+            val frames = listConsts[loop.groupValues[2]] ?: continue
+            animFrameNames.add(loop.groupValues[2])
+            val loopOff = r.first + loop.range.first
+            val edits = evs.filterIsInstance<Ev.Edit>().filter { it.off in r }
+            if (edits.none { it.off > loopOff }) continue
+            val delay = Regex("""sleep\(\s*([0-9.]+)\s*\)""").find(m)?.groupValues?.get(1)?.toDoubleOrNull()
+            val finalEdit = edits.lastOrNull { e ->
+                e.off > loopOff && !(e.textE is PyExpr.Name && (e.textE as PyExpr.Name).id == loopVar)
+            }
+            val final = finalEdit?.textE?.let { strOf(it, f) }
+            val sendMarkup = evs.filterIsInstance<Ev.Send>().firstOrNull { it.off in r }?.markup
+            val spec = AnimSpec(
+                preset = "custom",
+                frames = frames.map { normalizeText(it) },
+                intervalMs = ((delay ?: 0.7) * 1000).toInt().coerceIn(Anim.MIN_INTERVAL, Anim.MAX_INTERVAL),
+                finalText = final?.let { normalizeText(it) }.orEmpty(),
+                mono = frames.any { '\n' in it },
+            )
+            return Ev.Anim(loopOff, spec, finalEdit?.markup ?: sendMarkup, false)
+        }
+        return null
     }
 
     // ------------------------------------------------------------------
