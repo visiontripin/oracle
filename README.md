@@ -32,6 +32,7 @@
 | [`tg-bot-control/branding/`](tg-bot-control/branding/) | логотип (`logo.svg` — исходник), аватар бота, слайды презентации; генераторы `make_assets.py`, `make_android_icons.py` |
 | [`tg-bot-control/presentation-bot-ready.py`](tg-bot-control/presentation-bot-ready.py) | бот-презентация для @AppBotcontrol_bot (слайды кнопками, демо анимаций) |
 | [`docs/`](docs/) | веб-страница проекта (GitHub Pages из `/docs`) |
+| [`task.txt`](task.txt) → [`docs/matrix-links.html`](docs/matrix-links.html) | страница-хаб «Matrix Links» (ORACLE → DAROMVPL → BotControl App → ONEDOPEA): неоновый логотип BotControl в цикле и кнопка GitHub; `docs/matrix-links.html` — точная копия `task.txt` для Pages |
 | `botcontrol-handoff.zip` | архив для переноса проекта в чистый workspace |
 
 > Файл `ПЕРЕДАЧА-КОНТЕКСТА.md` в корне репозитория — это исходная версия
