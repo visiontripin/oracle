@@ -34,6 +34,8 @@ import androidx.compose.ui.unit.dp
 import com.botcontrol.admin.data.BotProfile
 import com.botcontrol.admin.data.LocalBotStore
 import com.botcontrol.admin.service.LocalBotService
+import com.botcontrol.admin.ui.components.BrandLogo
+import com.botcontrol.admin.ui.components.ProjectLinksCard
 import kotlinx.coroutines.launch
 
 /**
@@ -67,7 +69,8 @@ fun WelcomeScreen(
         Spacer(Modifier.height(8.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically) {
-            Column {
+            BrandLogo(48.dp)
+            Column(Modifier.weight(1f).padding(start = 12.dp)) {
                 Text("Мои боты", style = MaterialTheme.typography.headlineMedium)
                 Text("BotControl — боты с ИИ прямо на телефоне",
                     style = MaterialTheme.typography.bodySmall,
@@ -186,6 +189,8 @@ fun WelcomeScreen(
         OutlinedButton(onClick = onFaq, modifier = Modifier.fillMaxWidth()) {
             Text("❓ Как пользоваться — FAQ")
         }
+        Spacer(Modifier.height(12.dp))
+        ProjectLinksCard()
         Spacer(Modifier.height(24.dp))
     }
 

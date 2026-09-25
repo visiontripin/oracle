@@ -33,10 +33,15 @@ import com.botcontrol.admin.data.ReplyPack
 import java.util.UUID
 
 /**
- * Редактор inline-меню сообщения (до 3 кнопок): надпись, всплывашка,
+ * Редактор inline-меню сообщения (до [MAX_MENU_BUTTONS] кнопок): надпись, всплывашка,
  * действие (текст / случайное из набора / вкл-выкл напоминаний / скрипт /
  * анимация правкой сообщения / кубик).
  */
+/** Сколько кнопок можно добавить под одно сообщение (Telegram допускает больше). */
+const val MAX_MENU_BUTTONS = 12
+/** Сколько рядов предлагать в выборе «Ряд кнопок». */
+const val MAX_MENU_ROWS = 8
+
 @Composable
 fun MenuEditor(
     menu: List<InlineBtn>,
@@ -45,9 +50,10 @@ fun MenuEditor(
 ) {
     var editing by remember { mutableStateOf<InlineBtn?>(null) }
     var showAdd by remember { mutableStateOf(false) }
+    var deleting by remember { mutableStateOf<InlineBtn?>(null) }
 
     Column {
-        Text("Кнопки под этим сообщением (до 3):", style = MaterialTheme.typography.bodySmall)
+        Text("Кнопки под этим сообщением (до $MAX_MENU_BUTTONS):", style = MaterialTheme.typography.bodySmall)
         menu.forEach { btn ->
             Card(Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
                 Row(Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -57,15 +63,27 @@ fun MenuEditor(
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     TextButton(onClick = { editing = btn }) { Text("✎") }
-                    TextButton(onClick = { onChange(menu - btn) }) { Text("✕") }
+                    TextButton(onClick = { deleting = btn }) { Text("✕") }
                 }
             }
         }
-        if (menu.size < 3) {
+        if (menu.size < MAX_MENU_BUTTONS) {
             OutlinedButton(onClick = { showAdd = true }, modifier = Modifier.fillMaxWidth()) {
                 Text("+ Добавить кнопку")
             }
         }
+    }
+
+    deleting?.let { btn ->
+        AlertDialog(
+            onDismissRequest = { deleting = null },
+            title = { Text("Удалить кнопку?") },
+            text = { Text("«${btn.label}» исчезнет из меню этого сообщения.") },
+            confirmButton = {
+                TextButton(onClick = { onChange(menu - btn); deleting = null }) { Text("Удалить") }
+            },
+            dismissButton = { TextButton(onClick = { deleting = null }) { Text("Отмена") } },
+        )
     }
 
     if (showAdd || editing != null) {
@@ -218,7 +236,7 @@ private fun MenuButtonDialog(
                 Spacer(Modifier.height(4.dp))
                 DropdownField(
                     value = row,
-                    options = (1..3).toList(),
+                    options = (1..maxOf(MAX_MENU_ROWS, row)).toList(),
                     label = "Ряд кнопок",
                     display = { "Ряд $it" },
                     onSelect = { row = it },

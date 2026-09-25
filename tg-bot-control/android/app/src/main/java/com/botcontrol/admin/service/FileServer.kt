@@ -1,5 +1,6 @@
 package com.botcontrol.admin.service
 
+import com.botcontrol.admin.data.Brand
 import android.content.Context
 import com.botcontrol.admin.data.BotFiles
 import fi.iki.elonen.NanoHTTPD
@@ -44,15 +45,36 @@ class FileServer(context: Context) : NanoHTTPD(PORT) {
         sb.append("<html><head><meta charset='utf-8'>")
         sb.append("<meta name='viewport' content='width=device-width, initial-scale=1'>")
         sb.append("<title>BotControl — файлы ботов</title>")
-        sb.append("<style>body{font-family:sans-serif;background:#0E1621;color:#F5F6F7;padding:16px}")
-        sb.append("a{color:#5288C1}h3{margin:14px 0 6px}table{border-collapse:collapse;width:100%;max-width:760px}")
-        sb.append("td,th{border:1px solid #33475A;padding:6px;text-align:left;font-size:14px}")
-        sb.append(".tab{display:inline-block;padding:4px 10px;margin:2px;border-radius:8px;background:#17212B}")
-        sb.append(".on{background:#2B5278}.btn{color:#F5F6F7;background:#2B5278;padding:3px 10px;border-radius:6px;text-decoration:none}")
-        sb.append("</style></head><body>")
-        sb.append("<h2>📦 Файлы ботов BotControl</h2>")
-        sb.append("<p style='color:#7F91A4'>Загружайте файлы с компьютера или телефона в той же Wi-Fi сети. ")
-        sb.append("media — картинки и медиа, scripts — JS-скрипты для правил, docs — документы.</p>")
+        // Стиль — палитра приложения (Telegram dark), логотип — Brand.LOGO_SVG.
+        sb.append("<link rel='icon' href='data:image/svg+xml,")
+        sb.append(java.net.URLEncoder.encode(Brand.LOGO_SVG, "UTF-8").replace("+", "%20"))
+        sb.append("'>")
+        sb.append("<style>*{box-sizing:border-box}body{font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;")
+        sb.append("background:#0E1621;color:#F5F6F7;margin:0;padding:16px}main{max-width:800px;margin:0 auto}")
+        sb.append("a{color:#5288C1}h3{margin:18px 0 8px;font-size:15px;color:#7F91A4;font-weight:600}")
+        sb.append("header{display:flex;align-items:center;gap:14px;flex-wrap:wrap;background:#17212B;")
+        sb.append("border:1px solid #33475A;border-radius:16px;padding:14px 16px}.logo{width:52px;height:52px;flex:none}")
+        sb.append("header .t{flex:1;min-width:180px}header b{font-size:20px}header small{display:block;color:#7F91A4;margin-top:2px}")
+        sb.append(".card{background:#17212B;border:1px solid #33475A;border-radius:14px;padding:12px;margin-top:12px}")
+        sb.append("table{border-collapse:collapse;width:100%}td,th{border-bottom:1px solid #33475A;padding:8px 6px;")
+        sb.append("text-align:left;font-size:14px}th{color:#7F91A4;font-weight:600}tr:last-child td{border-bottom:none}")
+        sb.append(".tab{display:inline-block;padding:6px 12px;margin:2px;border-radius:10px;background:#182533;")
+        sb.append("color:#F5F6F7;text-decoration:none}.on{background:#2B5278}")
+        sb.append(".btn{display:inline-block;color:#F5F6F7;background:#2B5278;padding:6px 12px;border-radius:10px;")
+        sb.append("text-decoration:none;border:none;font-size:14px;cursor:pointer}.btn:hover{background:#5288C1}")
+        sb.append(".gh{background:#FBBF24;color:#0E1621;font-weight:600}.gh:hover{background:#FCD34D}")
+        sb.append(".ghost{background:transparent;border:1px solid #5288C1;color:#F5F6F7}")
+        sb.append("input[type=text]{background:#0E1621;color:#F5F6F7;border:1px solid #33475A;border-radius:8px;padding:6px}")
+        sb.append("footer{color:#7F91A4;font-size:13px;margin:18px 0 8px;text-align:center}")
+        sb.append("</style></head><body><main>")
+        sb.append("<header>").append(Brand.LOGO_SVG)
+        sb.append("<div class='t'><b>BotControl · файлы ботов</b>")
+        sb.append("<small>Загрузка с компьютера или телефона в той же Wi-Fi сети</small></div>")
+        sb.append("<a class='btn gh' href='${Brand.GITHUB_URL}' target='_blank' rel='noopener'>⭐ GitHub</a>")
+        sb.append("<a class='btn ghost' href='${Brand.RELEASES_URL}' target='_blank' rel='noopener'>⬇️ Релизы</a>")
+        sb.append("</header>")
+        sb.append("<p style='color:#7F91A4;font-size:14px'>media — картинки и медиа (в т.ч. кадры фото-анимаций), ")
+        sb.append("scripts — JS-скрипты для правил, docs — документы.</p>")
 
         val botIds = BotFiles.allBotIds(appContext).ifEmpty { listOf(1L) }
         sb.append("<h3>Бот:</h3>")
@@ -67,25 +89,30 @@ class FileServer(context: Context) : NanoHTTPD(PORT) {
         }
 
         sb.append("<h3>Файлы (${BotFiles.list(appContext, bot, kind).size}):</h3>")
-        sb.append("<table><tr><th>Имя</th><th>Размер</th><th></th><th></th></tr>")
+        sb.append("<div class='card'><table><tr><th>Имя</th><th>Размер</th><th></th><th></th></tr>")
         BotFiles.list(appContext, bot, kind).forEach { f ->
             val name = esc(f.name)
             val url = java.net.URLEncoder.encode(f.name, "UTF-8")
             sb.append("<tr><td>$name</td><td>${f.length() / 1024} КБ</td>")
             sb.append("<td><a class='btn' href='/file/$bot/$kind/$url'>скачать</a></td>")
-            sb.append("<td><a class='btn' href='/delete?bot=$bot&amp;kind=$kind&amp;name=$url'>удалить</a></td></tr>")
+            // Удаление — только после подтверждения.
+            sb.append("<td><a class='btn ghost' href='/delete?bot=$bot&amp;kind=$kind&amp;name=$url' ")
+            sb.append("onclick=\"return confirm('Удалить файл? Отменить будет нельзя.')\">удалить</a></td></tr>")
         }
-        sb.append("</table>")
+        sb.append("</table></div>")
 
         sb.append("<h3>Загрузить (до 3 файлов):</h3>")
-        sb.append("<form method='post' action='/upload' enctype='multipart/form-data'>")
+        sb.append("<form class='card' method='post' action='/upload' enctype='multipart/form-data'>")
         sb.append("<input type='hidden' name='bot' value='$bot'><input type='hidden' name='kind' value='$kind'>")
         for (n in 1..3) {
             sb.append("<p><input type='file' name='file$n'> ")
             sb.append("<input type='text' name='name$n' placeholder='имя (необязательно)' size='22'></p>")
         }
         sb.append("<p><button class='btn' type='submit'>Загрузить</button></p></form>")
-        sb.append("</body></html>")
+        sb.append("<footer>BotControl — Telegram-боты прямо с телефона · ")
+        sb.append("<a href='${Brand.GITHUB_URL}' target='_blank' rel='noopener'>github.com/visiontripin/oracle</a> · ")
+        sb.append("<a href='${Brand.DEMO_BOT_URL}' target='_blank' rel='noopener'>@${Brand.DEMO_BOT}</a></footer>")
+        sb.append("</main></body></html>")
 
         return newFixedLengthResponse(Response.Status.OK, "text/html; charset=utf-8", sb.toString())
     }

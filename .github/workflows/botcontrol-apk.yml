@@ -116,7 +116,8 @@ jobs:
           } > "$NOTES"
           # К релизу прикладываем APK и все готовые конфиги (*-ready.py),
           # чтобы у каждого нужного файла была прямая ссылка на скачивание.
-          ASSETS="tg-bot-control/BotControl-debug.apk $(ls tg-bot-control/*-ready.py 2>/dev/null | tr '\n' ' ')"
+          # + аватар бота (branding/avatar-640.png) — для @BotFather /setuserpic.
+          ASSETS="tg-bot-control/BotControl-debug.apk $(ls tg-bot-control/*-ready.py tg-bot-control/branding/avatar-*.png 2>/dev/null | tr '\n' ' ')"
           {
             echo
             echo "## Прямые ссылки на скачивание"

@@ -1,0 +1,18 @@
+package com.botcontrol.admin.data
+
+/**
+ * Бренд BotControl: ссылки проекта и логотип для HTML-страниц
+ * (файловый сервер). Исходник логотипа — tg-bot-control/branding/logo.svg,
+ * векторы Android — res/drawable/ic_logo.xml и ic_launcher_*.xml
+ * (branding/make_android_icons.py).
+ */
+object Brand {
+    const val GITHUB_URL = "https://github.com/visiontripin/oracle"
+    /** Релизы — пререлизы, поэтому /releases/latest не работает: даём список. */
+    const val RELEASES_URL = "https://github.com/visiontripin/oracle/releases"
+    const val DEMO_BOT = "AppBotcontrol_bot"
+    const val DEMO_BOT_URL = "https://t.me/AppBotcontrol_bot"
+
+    /** Логотип инлайн-SVG (размер задаётся CSS-классом .logo). */
+    const val LOGO_SVG = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" class="logo"><defs><linearGradient id="bcBg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#182533"/><stop offset="1" stop-color="#0E1621"/></linearGradient><linearGradient id="bcDisc" x1="0.15" y1="0.1" x2="0.85" y2="0.95"><stop offset="0" stop-color="#5288C1"/><stop offset="1" stop-color="#2B5278"/></linearGradient></defs><rect class="logo" rx="112" fill="url(#bcBg)"/><circle cx="256" cy="262" r="178" fill="url(#bcDisc)"/><circle cx="256" cy="262" r="178" fill="none" stroke="#F5F6F7" stroke-opacity="0.08" stroke-width="6"/><path d="M104 402 Q 150 352 212 336" fill="none" stroke="#FBBF24" stroke-width="15" stroke-linecap="round" stroke-dasharray="1 34"/><g transform="translate(262 262) scale(3.5) translate(-54.5 -52.5)"><path fill="#F5F6F7" d="M84,26 L24,50 C21.5,51 21.7,54.4 24.3,55.2 L38,59.4 L44,77.5 C44.8,79.9 47.9,80.3 49.4,78.2 L56.6,68.4 L68.5,77.3 C70.7,78.9 73.8,77.7 74.4,75.1 L86.8,29.6 C87.4,27.2 85.6,25.1 84,26 Z"/><path fill="#C9D7E6" d="M38,59.4 L72,36 L48.5,66.5 L44,77.5 Z"/></g><circle cx="392" cy="128" r="50" fill="#FBBF24" stroke="#0E1621" stroke-width="12"/><path d="M377 104 L413 128 L377 152 Z" fill="#0E1621" stroke="#0E1621" stroke-width="6" stroke-linejoin="round"/></svg>"""
+}

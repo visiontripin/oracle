@@ -235,6 +235,15 @@ def main():
     for i, (name, title, bullets, chat) in enumerate(SLIDES, 1):
         svg = slide(i, total, title, bullets, chat)
         render(svg, os.path.join(out_dir, name + ".png"), 1280, 720)
+    # копия для веб-страницы (GitHub Pages из /docs)
+    import shutil
+    web = os.path.join(HERE, "..", "..", "docs", "assets")
+    os.makedirs(os.path.join(web, "slides"), exist_ok=True)
+    shutil.copy(os.path.join(HERE, "logo.svg"), web)
+    shutil.copy(os.path.join(HERE, "logo-512.png"), web)
+    for name, *_ in SLIDES:
+        shutil.copy(os.path.join(out_dir, name + ".png"), os.path.join(web, "slides"))
+    print("→ docs/assets (logo + slides)")
 
 
 if __name__ == "__main__":
