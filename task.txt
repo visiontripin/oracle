@@ -1,0 +1,855 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Matrix Links</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body {
+  width: 100%;
+  height: 100%;
+  height: 100dvh;
+  background: #000;
+  overflow: hidden;
+  user-select: none;
+  position: fixed;
+  inset: 0;
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
+}
+canvas { display: block; width: 100%; height: 100%; }
+.scanlines {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 10;
+  background: repeating-linear-gradient(
+    to bottom,
+    transparent 0px, transparent 2px,
+    rgba(0, 0, 0, 0.18) 2px, rgba(0, 0, 0, 0.18) 4px
+  );
+}
+#oracle-wrap {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 5;
+  pointer-events: none;
+}
+#oracle-wrap::before {
+  content: "";
+  position: absolute;
+  width: 80%;
+  height: 40%;
+  background: radial-gradient(ellipse, rgba(0,0,0,0.72) 0%, transparent 70%);
+}
+#oracle {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 0.12em;
+  font-family: "Courier New", Consolas, "Lucida Console", monospace;
+  font-size: clamp(29px, 7.7vw, 92px);
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  line-height: 1;
+  text-decoration: none;
+  cursor: pointer;
+  pointer-events: auto;
+  text-align: center;
+}
+#oracle.inactive { pointer-events: none; cursor: default; }
+#oracle span {
+  display: inline-block;
+  min-width: 0.7em;
+  text-align: center;
+  color: #00c83a;
+  text-shadow: 0 0 6px #00ff55;
+  opacity: 0;
+  will-change: transform, opacity, color;
+  transition: color 0.2s, text-shadow 0.2s, opacity 0.18s, transform 0.18s;
+}
+#oracle span.show { opacity: 1; }
+#oracle span.locked {
+  color: #d4ffd4;
+  text-shadow: 0 0 4px #fff, 0 0 8px #6f6, 0 0 18px #0f0, 0 0 36px #0a0, 0 0 72px #050;
+}
+#oracle.done { animation: pulse 2.8s ease-in-out infinite; }
+#oracle.done:hover span.locked {
+  color: #ffffff;
+  text-shadow: 0 0 5px #fff, 0 0 12px #9f9, 0 0 28px #0f0, 0 0 55px #0f0;
+}
+#oracle.onedopea-mode { animation: glitch-skew 0.4s infinite linear alternate-reverse; }
+#oracle.onedopea-mode span { text-shadow: 2px 0 #ff00ff, -2px 0 #00ffff; }
+#oracle.onedopea-mode span.locked {
+  color: #fff;
+  text-shadow: 2px 0 #ff00ff, -2px 0 #00ffff, 0 0 10px #0f0, 0 0 20px #0f0, 0 0 40px #0f0;
+  animation: glitch-anim 0.15s infinite;
+}
+
+#bottom-btn {
+  position: fixed;
+  bottom: 8vh;
+  left: 50%;
+  width: 120px;
+  height: 44px;
+  border: 1px solid #0f0;
+  background: rgba(0, 255, 0, 0.03);
+  z-index: 6;
+  pointer-events: auto;
+  display: none;
+  text-decoration: none;
+  box-shadow: 0 0 10px rgba(0, 255, 0, 0.3), inset 0 0 10px rgba(0, 255, 0, 0.1);
+  overflow: visible;
+  animation: btnFlicker 3s infinite;
+  transition: transform 0.35s cubic-bezier(0.25, 0.46, 0.45, 0.94),
+              width 0.15s ease,
+              height 0.15s ease,
+              border-radius 0.15s ease;
+}
+#bottom-btn::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    rgba(0, 255, 0, 0.15) 0px,
+    transparent 1px,
+    transparent 3px
+  );
+  pointer-events: none;
+}
+#bottom-btn span {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  font-family: "Courier New", monospace;
+  color: #0f0;
+  font-size: 16px;
+  letter-spacing: 2px;
+  text-shadow: 0 0 5px #0f0;
+  pointer-events: none;
+}
+#bottom-btn.collapsing {
+  transition: all 1.2s cubic-bezier(0.8, 0, 1, 0.2) !important;
+  bottom: auto !important;
+  top: 50% !important;
+  left: 50% !important;
+  width: 6px !important;
+  height: 2px !important;
+  transform: translate(-50%, -50%) scale(0.5) !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+@keyframes btnFlicker {
+  0%, 100% { opacity: 1; border-color: #0f0; }
+  48% { opacity: 1; }
+  50% { opacity: 0.3; border-color: #050; }
+  52% { opacity: 1; }
+}
+
+#typing-el {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-family: "Courier New", Consolas, "Lucida Console", monospace;
+  font-size: clamp(18px, 4vw, 28px);
+  color: #0f0;
+  text-shadow: 0 0 6px #0f0;
+  z-index: 6;
+  pointer-events: none;
+  white-space: pre;
+  display: flex;
+  gap: 0;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+#typing-el span {
+  display: inline-block;
+  min-width: 0.6em;
+  text-align: center;
+  opacity: 0;
+  transition: opacity 0.3s, color 0.2s;
+}
+
+@keyframes pulse {
+  0%, 100% { filter: brightness(1) drop-shadow(0 0 8px #0f0); }
+  50% { filter: brightness(1.35) drop-shadow(0 0 22px #0f0); }
+}
+@keyframes glitch-anim {
+  0% { transform: translate(0); }
+  20% { transform: translate(-3px, 2px); }
+  40% { transform: translate(3px, -2px); }
+  60% { transform: translate(-2px, 3px); }
+  80% { transform: translate(2px, -3px); }
+  100% { transform: translate(0); }
+}
+@keyframes glitch-skew {
+  0% { transform: skew(0deg); }
+  20% { transform: skew(-3deg); }
+  40% { transform: skew(3deg); }
+  60% { transform: skew(-1deg); }
+  80% { transform: skew(1deg); }
+  100% { transform: skew(0deg); }
+}
+#tv-effect {
+  position: fixed;
+  inset: 0;
+  background: #fff;
+  z-index: 9999;
+  opacity: 0;
+  pointer-events: none;
+  transform-origin: center center;
+}
+#tv-effect.active {
+  animation: tvTurnOff 0.6s cubic-bezier(0.23, 1, 0.32, 1) forwards;
+}
+@keyframes tvTurnOff {
+  0% { opacity: 1; transform: scaleY(1) scaleX(1); filter: brightness(1); }
+  20% { opacity: 1; transform: scaleY(0.005) scaleX(1); filter: brightness(5); }
+  100% { opacity: 0; transform: scaleY(0.005) scaleX(0.005); filter: brightness(0); }
+}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="oracle-wrap">
+  <a id="oracle" class="inactive" href="#" target="_blank" rel="noopener noreferrer"></a>
+</div>
+<a id="bottom-btn" href="#" target="_blank" rel="noopener noreferrer"><span id="btn-text"></span></a>
+<div id="typing-el"></div>
+<div class="scanlines"></div>
+<div id="tv-effect"></div>
+
+<script>
+const C = document.getElementById('c');
+const X = C.getContext('2d', { alpha: false });
+const oracleEl = document.getElementById('oracle');
+const typingEl = document.getElementById('typing-el');
+const bottomBtn = document.getElementById('bottom-btn');
+const btnText = document.getElementById('btn-text');
+
+const GLYPHS = 'アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヲン0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+const S = 18;
+const N = 10;
+const MAX_CRUMBS = 300;
+let drops = [];
+let crumbs = [];
+let maxDrops = 40;
+let rainActive = true;
+let collapseStart = 0;
+let cycleFallMultiplier = 1.0;
+
+const TITLES = [
+  { word: 'ORACLE', url: 'https://t.me/OneDope_bot' },
+  { word: 'DAROMVPL', url: 'https://t.me/daromvpl' },
+  { word: 'BotControl\nApp', url: 'https://t.me/AppBotcontrol_bot' }
+];
+const SPECIAL_TITLE = { word: 'ONEDOPEA', url: 'https://t.me/onedopea' };
+
+const START_DELAY = 1400;
+const LETTER_STEP = 230;
+const APPEAR_SCRAMBLE_TIME = 760;
+const DISAPPEAR_SCRAMBLE_TIME = 680;
+const HOLD_TIME = 3600;
+const BETWEEN_WORDS_TIME = 650;
+const MAX_CYCLES_BEFORE_TV = 1;
+
+let currentTitleIndex = 0;
+let pendingTitleIndex = 0;
+let completedCycles = 0;
+let letters = [];
+let titlePhase = 'appearing';
+let phaseStart = performance.now() + START_DELAY;
+
+const TYPING_STRING = "............wake up, Neo!";
+let typingSpans = [];
+let typingState = 'idle';
+let typingStartTime = 0;
+let currentTypingIndex = 0;
+
+let btnGlitchInterval = null;
+let btnRespawnTimeout = null;
+
+let btnOffsetX = 0;
+let btnOffsetY = 0;
+let btnEscaping = false;
+let btnEscapeCooldown = false;
+let mouseX = -9999;
+let mouseY = -9999;
+
+function randomGlyph() {
+  return GLYPHS[(Math.random() * GLYPHS.length) | 0];
+}
+
+function getSafeZone() {
+  const rect = oracleEl.getBoundingClientRect();
+  if (rect.width > 0 && rect.height > 0) {
+    const padding = 30;
+    return {
+      x: rect.left - padding,
+      y: rect.top - padding,
+      w: rect.width + padding * 2,
+      h: rect.height + padding * 2
+    };
+  }
+  const w = Math.min(C.width * 0.85, 800);
+  const h = C.height * 0.30;
+  return { x: (C.width - w) / 2, y: (C.height - h) / 2, w, h };
+}
+
+function shatterButton() {
+  const rect = bottomBtn.getBoundingClientRect();
+  const cx = rect.left + rect.width / 2;
+  const cy = rect.top + rect.height / 2;
+
+  for (let i = 0; i < 25; i++) {
+    crumbs.push({
+      x: cx + (Math.random() - 0.5) * rect.width,
+      y: cy + (Math.random() - 0.5) * rect.height,
+      vx: (Math.random() - 0.5) * 12,
+      vy: (Math.random() - 0.5) * 10 - 2,
+      life: 1,
+      decay: 0.015 + Math.random() * 0.02,
+      w: 2 + Math.random() * 6,
+      h: 2 + Math.random() * 6,
+      isChar: Math.random() < 0.5,
+      ch: randomGlyph(),
+      chSize: S * (0.3 + Math.random() * 0.6),
+      rot: (Math.random() - 0.5) * 6,
+      rotV: (Math.random() - 0.5) * 0.4,
+      collapsing: false
+    });
+  }
+
+  bottomBtn.style.display = 'none';
+  btnEscaping = false;
+
+  if (btnRespawnTimeout) clearTimeout(btnRespawnTimeout);
+  btnRespawnTimeout = setTimeout(() => {
+    if (currentTitleIndex !== -1 && titlePhase !== 'tv_collapse' && titlePhase !== 'tv_off') {
+      btnOffsetX = 0;
+      btnOffsetY = 0;
+      bottomBtn.style.display = 'block';
+      bottomBtn.style.transform = 'translateX(-50%)';
+    }
+  }, 2000);
+}
+
+function checkButtonCollision() {
+  if (bottomBtn.style.display === 'none' || currentTitleIndex === -1) return;
+  const btnRect = bottomBtn.getBoundingClientRect();
+  const titleRect = oracleEl.getBoundingClientRect();
+  if (btnRect.left < titleRect.right &&
+      btnRect.right > titleRect.left &&
+      btnRect.top < titleRect.bottom &&
+      btnRect.bottom > titleRect.top) {
+    shatterButton();
+  }
+}
+
+function applyBtnTransform() {
+  bottomBtn.style.transform = `translate(calc(-50% + ${btnOffsetX}px), ${btnOffsetY}px)`;
+}
+
+function escapeButton() {
+  if (btnEscaping || btnEscapeCooldown) return;
+  btnEscaping = true;
+
+  if (btnGlitchInterval) { clearInterval(btnGlitchInterval); btnGlitchInterval = null; }
+
+  const rect = bottomBtn.getBoundingClientRect();
+  const btnCX = rect.left + rect.width / 2;
+  const btnCY = rect.top + rect.height / 2;
+  let dx = btnCX - mouseX;
+  let dy = btnCY - mouseY;
+  const dist = Math.hypot(dx, dy) || 1;
+  dx /= dist;
+  dy /= dist;
+
+  const angle = Math.atan2(dy, dx) + (Math.random() - 0.5) * 1.2;
+  const escapeDist = 100 + Math.random() * 300;
+
+  btnOffsetX += Math.cos(angle) * escapeDist;
+  btnOffsetY += Math.sin(angle) * escapeDist;
+
+  const maxOff = Math.max(C.width, C.height) * 0.4;
+  btnOffsetX = Math.max(-maxOff, Math.min(maxOff, btnOffsetX));
+  btnOffsetY = Math.max(-maxOff, Math.min(maxOff, btnOffsetY));
+
+  applyBtnTransform();
+  setTimeout(checkButtonCollision, 400);
+
+  btnEscapeCooldown = true;
+  setTimeout(() => {
+    btnEscaping = false;
+    btnEscapeCooldown = false;
+    if (bottomBtn.style.display !== 'none' && !bottomBtn.classList.contains('collapsing')) {
+      startBtnGlitch();
+    }
+  }, 600);
+}
+
+document.addEventListener('mousemove', (e) => {
+  mouseX = e.clientX;
+  mouseY = e.clientY;
+});
+
+function checkMouseProximity() {
+  if (bottomBtn.style.display === 'none' || btnEscaping || btnEscapeCooldown) return;
+  if (currentTitleIndex === -1) return;
+
+  const rect = bottomBtn.getBoundingClientRect();
+  const btnCX = rect.left + rect.width / 2;
+  const btnCY = rect.top + rect.height / 2;
+  const dist = Math.hypot(mouseX - btnCX, mouseY - btnCY);
+
+  if (dist < 80) {
+    escapeButton();
+  }
+}
+
+function startBtnGlitch() {
+  if (btnGlitchInterval) clearInterval(btnGlitchInterval);
+  btnGlitchInterval = setInterval(() => {
+    if (bottomBtn.classList.contains('collapsing') || btnEscaping) return;
+
+    const w = 40 + Math.random() * 160;
+    const h = 20 + Math.random() * 60;
+    const borderRadius = Math.random() < 0.3 ? (5 + Math.random() * 20) + 'px' : '0';
+
+    bottomBtn.style.width = w + 'px';
+    bottomBtn.style.height = h + 'px';
+    bottomBtn.style.borderRadius = borderRadius;
+
+    let txt = '';
+    const len = 3 + Math.floor(Math.random() * 8);
+    for (let i = 0; i < len; i++) txt += randomGlyph();
+    btnText.textContent = txt;
+
+    const jitterX = (Math.random() > 0.5 ? 1 : -1) * Math.random() * 100;
+    const jitterY = (Math.random() > 0.5 ? 1 : -1) * Math.random() * 100;
+    btnOffsetX += jitterX;
+    btnOffsetY += jitterY;
+
+    const maxOff = Math.max(C.width, C.height) * 0.4;
+    btnOffsetX = Math.max(-maxOff, Math.min(maxOff, btnOffsetX));
+    btnOffsetY = Math.max(-maxOff, Math.min(maxOff, btnOffsetY));
+
+    applyBtnTransform();
+    setTimeout(checkButtonCollision, 400);
+  }, 150);
+}
+
+function updateBottomBtn(index) {
+  if (btnGlitchInterval) { clearInterval(btnGlitchInterval); btnGlitchInterval = null; }
+  if (btnRespawnTimeout) { clearTimeout(btnRespawnTimeout); btnRespawnTimeout = null; }
+
+  btnOffsetX = 0;
+  btnOffsetY = 0;
+  btnEscaping = false;
+  btnEscapeCooldown = false;
+
+  if (index === -1) {
+    bottomBtn.style.display = 'none';
+  } else {
+    bottomBtn.style.display = 'block';
+    bottomBtn.href = TITLES[index].url;
+    bottomBtn.classList.remove('collapsing');
+    bottomBtn.style.width = '120px';
+    bottomBtn.style.height = '44px';
+    bottomBtn.style.borderRadius = '0';
+    bottomBtn.style.transform = 'translateX(-50%)';
+    startBtnGlitch();
+  }
+}
+
+function setupTitle(index, startAt = performance.now()) {
+  currentTitleIndex = index;
+  const item = index === -1 ? SPECIAL_TITLE : TITLES[index];
+  oracleEl.href = item.url;
+  oracleEl.title = item.word.replace('\n', ' ') + ' → ' + item.url;
+  oracleEl.setAttribute('aria-label', item.word.replace('\n', ' ') + ' Telegram link');
+  oracleEl.classList.remove('done');
+  if (index === -1) {
+    oracleEl.classList.add('inactive', 'onedopea-mode');
+  } else {
+    oracleEl.classList.remove('onedopea-mode');
+    oracleEl.classList.add('inactive');
+  }
+  oracleEl.innerHTML = '';
+
+  letters = item.word.split('').map(ch => {
+    const span = document.createElement('span');
+    if (ch === '\n') {
+      span.style.display = 'block';
+      span.style.width = '100%';
+      span.style.height = '0.5em';
+      span.dataset.locked = '1';
+      span.dataset.hidden = '1';
+      span.classList.add('show');
+    } else {
+      span.dataset.target = ch;
+      span.dataset.locked = '0';
+      span.dataset.hidden = '0';
+      span.textContent = '';
+    }
+    oracleEl.appendChild(span);
+    return span;
+  });
+
+  titlePhase = 'appearing';
+  phaseStart = startAt;
+  updateBottomBtn(index);
+}
+
+setupTitle(0, performance.now() + START_DELAY);
+
+function setupTyping(now) {
+  typingEl.innerHTML = '';
+  typingSpans = TYPING_STRING.split('').map(ch => {
+    const span = document.createElement('span');
+    span.dataset.target = ch;
+    span.dataset.hidden = '0';
+    span.textContent = '';
+    span.style.opacity = '0';
+    typingEl.appendChild(span);
+    return span;
+  });
+  typingState = 'typing';
+  currentTypingIndex = 0;
+  typingStartTime = now;
+  bottomBtn.style.display = 'none';
+}
+
+function updateTyping(now) {
+  if (typingState === 'typing') {
+    const elapsed = now - typingStartTime;
+    const charsToShow = Math.floor(elapsed / 70);
+    if (charsToShow > currentTypingIndex && currentTypingIndex < typingSpans.length) {
+      currentTypingIndex = charsToShow;
+      for (let i = 0; i < currentTypingIndex; i++) {
+        typingSpans[i].textContent = typingSpans[i].dataset.target;
+        typingSpans[i].style.opacity = '1';
+      }
+    }
+    if (currentTypingIndex >= typingSpans.length) {
+      typingState = 'holding';
+      typingStartTime = now;
+    }
+  } else if (typingState === 'holding') {
+    if (now - typingStartTime > 1800) {
+      typingState = 'crumbling';
+      typingStartTime = now;
+    }
+  } else if (typingState === 'crumbling') {
+    const elapsed = now - typingStartTime;
+    typingSpans.forEach((span, i) => {
+      const delay = i * 25;
+      if (elapsed > delay && span.dataset.hidden === '0') {
+        span.dataset.hidden = '1';
+        span.textContent = randomGlyph();
+        span.style.color = '#0a0';
+        span.style.opacity = '0';
+      }
+    });
+    const allHidden = typingSpans.every(s => s.dataset.hidden === '1');
+    if (allHidden && elapsed > typingSpans.length * 25 + 600) {
+      titlePhase = 'between';
+      pendingTitleIndex = -1;
+      phaseStart = now + 400;
+    }
+  }
+}
+
+function triggerTvOff() {
+  titlePhase = 'tv_collapse';
+  collapseStart = performance.now();
+  rainActive = false;
+  bottomBtn.classList.add('collapsing');
+  if (btnGlitchInterval) { clearInterval(btnGlitchInterval); btnGlitchInterval = null; }
+  drops.forEach(d => { d.collapsing = true; d.vx = 0; d.vy = 0; });
+  crumbs.forEach(c => { c.collapsing = true; });
+}
+
+function updateCenterTitle(now) {
+  if (titlePhase === 'typing_phase') { updateTyping(now); return; }
+  if (titlePhase === 'between') {
+    if (now >= phaseStart) setupTitle(pendingTitleIndex, now);
+    return;
+  }
+  if (titlePhase === 'tv_collapse' || titlePhase === 'tv_off') return;
+  if (now < phaseStart) return;
+
+  if (titlePhase === 'appearing') {
+    const t = now - phaseStart;
+    letters.forEach((el, i) => {
+      if (el.dataset.locked === '1') return;
+      const delay = i * LETTER_STEP;
+      if (t < delay) return;
+      el.classList.add('show');
+      el.textContent = randomGlyph();
+      if (t > delay + APPEAR_SCRAMBLE_TIME) {
+        el.dataset.locked = '1';
+        el.textContent = el.dataset.target;
+        el.classList.add('locked');
+      }
+    });
+    const allLocked = letters.every(el => el.dataset.locked === '1');
+    if (allLocked) {
+      titlePhase = 'hold';
+      phaseStart = now;
+      oracleEl.classList.remove('inactive');
+      oracleEl.classList.add('done');
+    }
+    return;
+  }
+
+  if (titlePhase === 'hold') {
+    const holdDuration = currentTitleIndex === -1 ? 7000 : HOLD_TIME;
+    if (currentTitleIndex !== -1) {
+      letters.forEach(el => {
+        if (el.dataset.locked === '1' && el.dataset.hidden === '0') {
+          if (Math.random() < 0.02) {
+            const target = el.dataset.target;
+            el.textContent = randomGlyph();
+            setTimeout(() => {
+              if (titlePhase === 'hold' && el.dataset.target === target) el.textContent = target;
+            }, 40 + Math.random() * 60);
+          }
+        }
+      });
+    } else {
+      letters.forEach(el => {
+        if (el.dataset.locked === '1') return;
+        if (Math.random() < 0.08) {
+          const target = el.dataset.target;
+          el.textContent = randomGlyph();
+          el.style.color = Math.random() > 0.5 ? '#ff00ff' : '#00ffff';
+          setTimeout(() => {
+            if (titlePhase === 'hold') { el.textContent = target; el.style.color = ''; }
+          }, 60);
+        }
+      });
+    }
+    if (now - phaseStart > holdDuration) {
+      titlePhase = 'disappearing';
+      phaseStart = now;
+      oracleEl.classList.remove('done', 'onedopea-mode');
+      oracleEl.classList.add('inactive');
+      letters.forEach(el => { if (el.dataset.locked !== '1') el.dataset.hidden = '0'; });
+    }
+    return;
+  }
+
+  if (titlePhase === 'disappearing') {
+    const t = now - phaseStart;
+    const scrambleTime = currentTitleIndex === -1 ? DISAPPEAR_SCRAMBLE_TIME * 0.8 : DISAPPEAR_SCRAMBLE_TIME;
+    letters.forEach((el, i) => {
+      if (el.dataset.hidden === '1') return;
+      const delay = i * LETTER_STEP;
+      if (t < delay) return;
+      el.classList.remove('locked');
+      el.textContent = randomGlyph();
+      if (t > delay + scrambleTime) { el.classList.remove('show'); el.dataset.hidden = '1'; }
+    });
+    const allHidden = letters.every(el => el.dataset.hidden === '1');
+    if (allHidden) {
+      if (currentTitleIndex === -1) {
+        completedCycles = 0;
+        pendingTitleIndex = 0;
+        titlePhase = 'between';
+        phaseStart = now + BETWEEN_WORDS_TIME;
+        rainActive = true;
+        cycleFallMultiplier = Math.min(16.0, cycleFallMultiplier * 2);
+      } else {
+        if (currentTitleIndex === TITLES.length - 1) completedCycles++;
+        if (completedCycles >= MAX_CYCLES_BEFORE_TV) {
+          triggerTvOff();
+        } else {
+          pendingTitleIndex = (currentTitleIndex + 1) % TITLES.length;
+          titlePhase = 'between';
+          phaseStart = now + BETWEEN_WORDS_TIME;
+        }
+      }
+    }
+  }
+}
+
+function resize() {
+  C.width = window.innerWidth;
+  C.height = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+  maxDrops = Math.max(15, Math.floor(C.width / S) * 0.25);
+}
+resize();
+addEventListener('resize', resize);
+if (window.visualViewport) window.visualViewport.addEventListener('resize', resize);
+
+function glyphAt(d, i) {
+  return GLYPHS[((d.glyph - i) % GLYPHS.length + GLYPHS.length) % GLYPHS.length];
+}
+
+function spawnDrop() {
+  drops.push({
+    x: Math.floor(Math.random() * (C.width / S)) * S,
+    y: -S, startY: -S,
+    speed: 1.2 + Math.random() * 2.2,
+    glyph: (Math.random() * GLYPHS.length) | 0,
+    shattered: false, collapsing: false,
+    vx: 0, vy: 0, alpha: 1
+  });
+}
+
+function shatterDrop(d) {
+  d.shattered = true;
+  for (let i = 0; i < N; i++) {
+    const py = d.y - i * S;
+    if (py < -S || py > C.height + S) continue;
+    const count = 4 + ((Math.random() * 4) | 0);
+    for (let j = 0; j < count; j++) {
+      crumbs.push({
+        x: d.x + Math.random() * S, y: py + Math.random() * S,
+        vx: (Math.random() - 0.5) * 7, vy: (Math.random() - 0.5) * 6 - 1,
+        life: 1, decay: 0.012 + Math.random() * 0.02,
+        w: 1 + Math.random() * 4, h: 1 + Math.random() * 4,
+        isChar: Math.random() < 0.35, ch: glyphAt(d, i),
+        chSize: S * (0.28 + Math.random() * 0.5),
+        rot: (Math.random() - 0.5) * 4, rotV: (Math.random() - 0.5) * 0.28,
+        collapsing: false
+      });
+    }
+  }
+}
+
+function updateDrop(d) {
+  if (d.collapsing) {
+    const cx = C.width / 2, cy = C.height / 2;
+    const dx = cx - d.x, dy = cy - d.y;
+    const dist = Math.hypot(dx, dy) || 1;
+    const elapsed = performance.now() - collapseStart;
+    const accel = 0.8 + elapsed / 800;
+    d.vx = (d.vx || 0) + (dx / dist) * accel;
+    d.vy = (d.vy || 0) + (dy / dist) * accel;
+    d.vx *= 0.94; d.vy *= 0.94;
+    d.x += d.vx; d.y += d.vy;
+    d.alpha = Math.min(1, dist / 100);
+    return dist > 15;
+  }
+  if (!d.shattered && currentTitleIndex !== 2) {
+    const sz = getSafeZone();
+    if (d.y >= sz.y && d.y <= sz.y + sz.h && d.x >= sz.x && d.x <= sz.x + sz.w) shatterDrop(d);
+  }
+  if (d.shattered) { d.alpha -= 0.07; return d.alpha > 0; }
+  d.y += d.speed;
+  d.glyph = (d.glyph + 1) % GLYPHS.length;
+  if (d.y - d.startY >= N * S * cycleFallMultiplier) shatterDrop(d);
+  return d.y - N * S < C.height + S;
+}
+
+function updateCrumb(c) {
+  if (c.collapsing) {
+    const cx = C.width / 2, cy = C.height / 2;
+    const dx = cx - c.x, dy = cy - c.y;
+    const dist = Math.hypot(dx, dy) || 1;
+    const elapsed = performance.now() - collapseStart;
+    const accel = 1.5 + elapsed / 400;
+    c.vx += (dx / dist) * accel; c.vy += (dy / dist) * accel;
+    c.vx *= 0.92; c.vy *= 0.92;
+    c.x += c.vx; c.y += c.vy;
+    c.life = Math.min(1, dist / 60);
+    return dist > 10;
+  }
+  c.x += c.vx; c.y += c.vy;
+  c.vy += 0.16; c.vx *= 0.985;
+  c.rot += c.rotV; c.life -= c.decay;
+  return c.life > 0;
+}
+
+function drawDrop(d) {
+  X.font = S + 'px monospace';
+  for (let i = 0; i < N; i++) {
+    const py = d.y - i * S;
+    if (py < -S || py > C.height) continue;
+    const ch = glyphAt(d, i);
+    if (i === 0 && !d.shattered) {
+      X.shadowColor = '#0F0'; X.shadowBlur = 8;
+      X.fillStyle = `rgba(200,255,200,${d.alpha})`;
+    } else {
+      X.shadowBlur = 0;
+      const f = Math.max(0, 1 - i / N);
+      const g = (255 * f * d.alpha) | 0;
+      X.fillStyle = `rgba(0,${g},0,${d.alpha})`;
+    }
+    X.fillText(ch, d.x, py);
+  }
+  X.shadowBlur = 0;
+}
+
+function drawCrumb(c) {
+  const a = Math.max(0, c.life);
+  const g = (220 * a) | 0;
+  X.save();
+  X.translate(c.x, c.y);
+  X.rotate(c.rot);
+  if (c.isChar) {
+    X.font = c.chSize + 'px monospace';
+    X.fillStyle = `rgba(0,${g},40,${a})`;
+    X.fillText(c.ch, 0, 0);
+  } else {
+    X.fillStyle = `rgba(0,${g},30,${a})`;
+    X.fillRect(-c.w / 2, -c.h / 2, c.w, c.h);
+  }
+  X.restore();
+}
+
+function loop(now) {
+  X.fillStyle = '#000';
+  X.fillRect(0, 0, C.width, C.height);
+
+  if (rainActive && Math.random() < 0.45 && drops.length < maxDrops) spawnDrop();
+
+  for (let i = drops.length - 1; i >= 0; i--) {
+    if (updateDrop(drops[i])) drawDrop(drops[i]);
+    else drops.splice(i, 1);
+  }
+  if (crumbs.length > MAX_CRUMBS) crumbs.splice(0, crumbs.length - MAX_CRUMBS);
+  for (let i = crumbs.length - 1; i >= 0; i--) {
+    if (updateCrumb(crumbs[i])) drawCrumb(crumbs[i]);
+    else crumbs.splice(i, 1);
+  }
+
+  if (titlePhase === 'tv_collapse') {
+    const allGone = drops.length === 0 && crumbs.length === 0;
+    if (allGone || now - collapseStart > 1500) {
+      titlePhase = 'tv_off';
+      const tvOverlay = document.getElementById('tv-effect');
+      tvOverlay.classList.add('active');
+      setTimeout(() => {
+        tvOverlay.classList.remove('active');
+        titlePhase = 'typing_phase';
+        setupTyping(performance.now());
+      }, 600);
+    }
+  }
+
+  checkMouseProximity();
+
+  updateCenterTitle(now);
+  requestAnimationFrame(loop);
+}
+
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
