@@ -105,6 +105,12 @@ class LocalBotService : Service() {
         super.onDestroy()
     }
 
+    /** Версия в строке запуска: по логу сразу видно, какая сборка работает. */
+    @Suppress("DEPRECATION")
+    private val appVersion: String by lazy {
+        runCatching { packageManager.getPackageInfo(packageName, 0).versionName }.getOrNull() ?: "?"
+    }
+
     private fun newScope(): CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     private fun shutdown() {
@@ -182,7 +188,7 @@ class LocalBotService : Service() {
             if (states.value[botId]?.running != true) return
         }
         setState(botId) { it.copy(botUsername = botName, running = true, lastError = "") }
-        BotLog.log(botId, "🚀 Бот запущен (правил: ${runCatching { app.repository.botRules(botId).size }.getOrDefault(-1)})")
+        BotLog.log(botId, "🚀 Бот запущен (правил: ${runCatching { app.repository.botRules(botId).size }.getOrDefault(-1)}) · BotControl v$appVersion")
         refreshNotification()
 
         // Главное меню Telegram (кнопка «Меню») — применяем сохранённый список.
