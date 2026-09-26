@@ -10,7 +10,8 @@ name: BotControl APK
 
 on:
   push:
-    branches: ["arena/01a0d2d9-oracle"]
+    # любая ветка сессии агента (arena/…) и main — новый чат получает новую ветку
+    branches: ["arena/**", "main"]
     paths:
       - "tg-bot-control/android/**"
       - ".github/workflows/botcontrol-apk.yml"
@@ -120,7 +121,7 @@ jobs:
           # К релизу прикладываем APK и все готовые конфиги (*-ready.py),
           # чтобы у каждого нужного файла была прямая ссылка на скачивание.
           # + аватар бота (branding/avatar-640.png) — для @BotFather /setuserpic.
-          ASSETS="tg-bot-control/BotControl-debug.apk $(ls tg-bot-control/*-ready.py tg-bot-control/branding/avatar-*.png 2>/dev/null | tr '\n' ' ')"
+          ASSETS="tg-bot-control/BotControl-debug.apk $(ls tg-bot-control/*-ready.py tg-bot-control/branding/avatar-*.png handoff/*.txt 2>/dev/null | tr '\n' ' ')"
           {
             echo
             echo "## Прямые ссылки на скачивание"

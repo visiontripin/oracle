@@ -1,3 +1,7 @@
+АКТУАЛЬНЫЙ ПРОМТ — handoff/00-PROMPT-new-chat.txt в корне репозитория:
+https://github.com/visiontripin/oracle/blob/arena/01a0d2d9-oracle/handoff/00-PROMPT-new-chat.txt
+(инструкции 01–04 лежат рядом). Текст ниже — старый короткий вариант.
+
 ПРОМТ ДЛЯ НОВОГО ОКНА (скопируй целиком и вставь первым сообщением):
 
 ---

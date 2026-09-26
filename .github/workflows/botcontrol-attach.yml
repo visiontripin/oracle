@@ -7,9 +7,11 @@ name: BotControl attach configs
 
 on:
   push:
-    branches: ["arena/01a0d2d9-oracle"]
+    # любая ветка сессии агента (arena/…) и main — новый чат получает новую ветку
+    branches: ["arena/**", "main"]
     paths:
       - "tg-bot-control/*-ready.py"
+      - "handoff/*.txt"
       - ".github/workflows/botcontrol-attach.yml"
   workflow_dispatch:
 
@@ -30,7 +32,8 @@ jobs:
           VC=$(grep -oP 'versionCode\s*=\s*\K\d+' "$GRADLE")
           VN=$(grep -oP 'versionName\s*=\s*"\K[^"]+' "$GRADLE")
           TAG="botcontrol-v${VN}-code${VC}"
-          FILES=$(ls tg-bot-control/*-ready.py)
+          # конфиги ботов + инструкции для нового чата (handoff/*.txt)
+          FILES=$(ls tg-bot-control/*-ready.py handoff/*.txt 2>/dev/null)
           # Релиз может ещё собираться (сборка APK) — ждём до ~15 минут.
           for i in $(seq 1 30); do
             gh release view "$TAG" > /dev/null 2>&1 && break

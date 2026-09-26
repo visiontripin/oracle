@@ -1,0 +1,81 @@
+BotControl — ЛОВУШКИ ПЕСОЧНИЦЫ И КОДА (всё уже ломалось хотя бы раз)
+====================================================================
+Полный список — ПЕРЕДАЧА-КОНТЕКСТА.md, раздел 8. Здесь — главное и свежее.
+
+ПЕСОЧНИЦА АГЕНТА
+----------------
+• Рабочую копию МОЛЧА сбрасывает до «Initial commit», иногда между сообщениями.
+  В начале каждого хода: git log --oneline -1. Если не то:
+    git fetch origin <ветка> && git reset --hard FETCH_HEAD && git clean -fd
+  Пушь промежуточные коммиты (без [apk]) почаще.
+• Сеть: доступны только github.com, pypi и npm. Закрыты raw.githubusercontent.com
+  (curl exit 35), Google Maven, Maven Central и Gradle. Поэтому APK собирает
+  только CI.
+• Скачать release-assets или артефакты Actions НЕЛЬЗЯ (gh release download,
+  gh run download, gh release upload, curl — всё падает). APK бери из тега
+  через git fetch + git show (см. 02-build-release.txt).
+• `gh pr edit` падает (Projects classic). Используй gh api -X PATCH …/pulls/<N>.
+• GitHub Pages API отвечает 403. Pages включает пользователь вручную.
+• Не складывай большие файлы в git. Каталоги build/, .gradle/, node_modules
+  не коммить. Сам APK в gitignore и живёт только в тегах релизов.
+• Headless-браузер для скриншотов HTML-страниц (task.txt, docs/*.html):
+  npm @sparticuz/chromium + puppeteer-core; библиотеки распаковать из
+  bin/al2023.tar.br (brotli) и запускать с LD_LIBRARY_PATH=<папка>/lib.
+  Анимации снимай с подменой времени (performance.now / таймеры / rAF),
+  в реальном времени слишком медленно. CJK-шрифта нет, катакана будет
+  квадратиками (это не страшно).
+• read_file на большом PNG падает, читай маленькие кропы.
+
+KOTLIN / ANDROID
+----------------
+• МУЛЬТИБОТЫ: в LocalBotStore/BotRepository botId = -1L — это «бот, активный в UI».
+  На экранах это нормально (BotTreeScreen делает бота активным при входе), но в
+  service/ и data/ ВСЕГДА передавай botId. Карты в памяти ключуй "$botId:$chatId"
+  (в личке chatId = id пользователя, одинаковый у всех ботов).
+  CI-страж: tg-bot-control/tools/check-bot-isolation.py.
+• Строки журнала бота пиши через BotLog.log(botId, "…") (service/BotLog.kt), а
+  из экранов через BotLog.log(store, botId, "…"). Метка [@бот] вставится сама.
+• Удаление в UI: val confirm = remember { mutableStateOf<ConfirmRequest?>(null) };
+  ConfirmHost(confirm); onClick = { confirm.value = ConfirmRequest("Удалить …?", "…") { … } }.
+• Добавил LaunchedEffect или компонент — ПРОВЕРЬ ИМПОРТЫ (частая причина падения сборки).
+• `return@else` в Kotlin недопустим. Elvis внутри `map + (id to x?.copy() ?: y)`
+  вычисляй заранее. suspend-вызовы из не-inline лямбд (joinToString и т. п.)
+  не компилируются — используй for-цикл.
+• Лямбда @Composable внутри if/else может потерять тип. Пиши
+  text = { if (cond) Text(…) }, а не text = if (…) null else ({ … }).
+• Kotlin-regex пиши raw-строками """…""". В python-хередоках \n превращается
+  в перевод строки: для замен используй r'…' и '''…''' вместо """.
+• ReplyPack.ownerBotId: 0 = общий набор. Импорт обновляет только свои наборы и
+  общие наборы, не используемые другими ботами. id набора уникален
+  (uniquePackId). Экспорт берёт свои наборы и общие неиспользуемые
+  (SettingsExporter.packRefs).
+• ИИ: модель одна на все боты, а параметры бота передаются в каждый запрос
+  (LlmEngine.generate(system, user, params)).
+
+TELEGRAM
+--------
+• Текстовое сообщение нельзя отредактировать в фото, и наоборот
+  (AnimPlayer показывает новым сообщением).
+• editMessageMedia/Caption без reply_markup СНИМАЕТ клавиатуру: меню вешай на
+  последний кадр или на итоговый текст.
+• file_id фото действует только внутри одного бота (кеш в AnimPlayer
+  ключуется "$botId|$src").
+• При частых правках Telegram просит паузу (429 retry_after), AnimPlayer ждёт.
+
+ГРАФИКА И СТРАНИЦЫ
+------------------
+• SVG → PNG: resvg_py (cairosvg без libcairo не работает). Эмодзи в
+  SVG-тексте не рисуются, используй символы DejaVu (▶ ■ ● ✓ ★ ◆ ☰ ▰ ▱).
+• VectorDrawable не поддерживает stroke-dasharray.
+• task.txt (страница Matrix Links, CRLF!) должен совпадать с
+  docs/matrix-links.html. После правки: cp task.txt docs/matrix-links.html.
+• Источник логотипа — tg-bot-control/branding/logo.svg. Генераторы:
+  make_assets.py, make_android_icons.py (pip install resvg-py pillow).
+
+ДИАГНОСТИКА ПО ЛОГАМ ПОЛЬЗОВАТЕЛЯ
+---------------------------------
+• С v1.6.5 строка запуска выглядит так: «🚀 [@бот] Бот запущен (правил: N) · BotControl vX».
+  Нет метки [@бот] и версии — значит, лог со сборки ≤ v1.6.2. Скажи об этом
+  пользователю, прежде чем что-то чинить.
+• «Проверяю правила (N)»: у каждого бота своё N. Это подсказывает, какой бот
+  ответил, даже в старых логах.

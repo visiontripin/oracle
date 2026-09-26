@@ -24,6 +24,7 @@
 
 | Путь | Что там |
 |---|---|
+| [`handoff/`](handoff/) | **перенос в новый чат**: `00-PROMPT-new-chat.txt` (готовый промт со ссылками), `01` требования, `02` сборка/релиз, `03` ловушки, `04` состояние и задачи; txt прикладываются к каждому релизу |
 | [`tg-bot-control/ПЕРЕДАЧА-КОНТЕКСТА.md`](tg-bot-control/ПЕРЕДАЧА-КОНТЕКСТА.md) | **читать первым делом**: состояние, карта файлов, грамматика импорта, требования, ловушки, история версий |
 | [`tg-bot-control/`](tg-bot-control/) | сам проект: `android/` (исходники), `server/`, готовые конфиги `*.py`, доки |
 | [`tg-bot-control/tools/kotlin-harness/`](tg-bot-control/tools/kotlin-harness/) | прогон импортёра (`PySource` / `ScriptImporter`) на Kotlin без Android SDK |
