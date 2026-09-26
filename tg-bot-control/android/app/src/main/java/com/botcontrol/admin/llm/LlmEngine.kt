@@ -24,8 +24,12 @@ interface LlmEngine {
     /** Loads a model file from local storage. Blocking work happens off the main thread. */
     suspend fun load(modelPath: String, params: EngineParams)
 
-    /** One-shot generation. [system] may be empty. */
-    suspend fun generate(system: String, user: String): String
+    /**
+     * One-shot generation. [system] may be empty. [params] — параметры бота,
+     * который спрашивает (модель общая на все боты, настройки — у каждого свои);
+     * null = параметры, с которыми модель загружена.
+     */
+    suspend fun generate(system: String, user: String, params: EngineParams? = null): String
 
     /** Frees model memory. Safe to call twice. */
     fun unload()

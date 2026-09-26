@@ -315,8 +315,8 @@ fun BotTreeScreen(
                         repository.deleteBotRules(botId)
                         localStore.resetBot(botId)
                         info = "✅ Настройки бота сброшены до заводских"
-                        com.botcontrol.admin.llm.DeviceLlm.log(
-                            "♻️ Сброшены настройки бота $botId (правила, расписание, ИИ, меню)")
+                        com.botcontrol.admin.service.BotLog.log(localStore, botId,
+                            "♻️ Сброшены настройки бота (правила, расписание, ИИ, меню)")
                     }
                 }) { Text("Сбросить", color = MaterialTheme.colorScheme.error) }
             },

@@ -169,7 +169,7 @@ fun ImportScreen(
                                 parsed = p,
                                 wanted = { key -> checked[key] ?: true },
                             )
-                            DeviceLlm.log("📥 Импорт применён: ${result.take(200)}")
+                            com.botcontrol.admin.service.BotLog.log(localStore, botId, "📥 Импорт применён: ${result.take(200)}")
                             message = "✅ $result"
                             parsed = null
                             source = ""
@@ -393,7 +393,7 @@ private suspend fun applyParsed(
         }
         if (noAction.isNotEmpty()) {
             done.add("без действия: ${noAction.size}")
-            DeviceLlm.log("⚠️ Кнопки клавиатуры без действия: ${noAction.joinToString(", ")}")
+            com.botcontrol.admin.service.BotLog.log(localStore, botId, "⚠️ Кнопки клавиатуры без действия: ${noAction.joinToString(", ")}")
         }
     }
 
@@ -430,7 +430,7 @@ private suspend fun applyParsed(
         // В скрипте нет ни inline-меню, ни клавиатуры чата — говорим прямо,
         // иначе «Выбирай кнопки ниже» остаётся без кнопок.
         done.add("кнопок в скрипте нет")
-        DeviceLlm.log("ℹ️ В скрипте не найдено кнопок (ни inline-меню, ни клавиатуры чата). " +
+        com.botcontrol.admin.service.BotLog.log(localStore, botId, "ℹ️ В скрипте не найдено кнопок (ни inline-меню, ни клавиатуры чата). " +
             "Задай их в «Правила ответов» (меню сообщения) или включи режим «Объявления».")
     }
 

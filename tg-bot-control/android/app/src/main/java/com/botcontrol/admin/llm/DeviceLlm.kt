@@ -92,7 +92,7 @@ object DeviceLlm {
         return s.trim()
     }
 
-    suspend fun generate(system: String, user: String): Result<String> {
+    suspend fun generate(system: String, user: String, params: EngineParams? = null): Result<String> {
         val impl = engine ?: run {
             log("❌ Генерация отменена: модель не загружена")
             return Result.failure(IllegalStateException("модель не загружена"))
@@ -100,7 +100,7 @@ object DeviceLlm {
         _busy.value = true
         log("💬 Запрос: ${user.take(160)}")
         return try {
-            val reply = impl.generate(system, user).stripThinking()
+            val reply = impl.generate(system, user, params).stripThinking()
             log("✅ Ответ: ${reply.length} симв.")
             Result.success(reply)
         } catch (e: Throwable) {

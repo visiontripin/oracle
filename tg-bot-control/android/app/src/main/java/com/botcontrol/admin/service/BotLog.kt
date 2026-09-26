@@ -1,6 +1,8 @@
 package com.botcontrol.admin.service
 
+import com.botcontrol.admin.data.LocalBotStore
 import com.botcontrol.admin.llm.DeviceLlm
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Журнал событий с меткой бота. Боты работают параллельно, и без метки
@@ -13,10 +15,19 @@ import com.botcontrol.admin.llm.DeviceLlm
  */
 object BotLog {
 
+    /** Имена из профилей — для строк экранов, когда бот не запущен. */
+    private val names = ConcurrentHashMap<Long, String>()
+
     /** «@username», пока имя не известно — «бот #id». */
     fun label(botId: Long): String =
-        LocalBotService.states.value[botId]?.botUsername
-            ?.takeIf { it.isNotBlank() }?.let { "@$it" } ?: "бот #$botId"
+        (LocalBotService.states.value[botId]?.botUsername?.takeIf { it.isNotBlank() }
+            ?: names[botId])?.let { "@$it" } ?: "бот #$botId"
+
+    /** Для экранов: сначала подтянуть имя из профиля, затем записать строку. */
+    suspend fun log(store: LocalBotStore, botId: Long, line: String) {
+        store.profile(botId)?.username?.takeIf { it.isNotBlank() }?.let { names[botId] = it }
+        log(botId, line)
+    }
 
     fun tag(botId: Long): String = "[${label(botId)}]"
 

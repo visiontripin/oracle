@@ -237,8 +237,9 @@ object BotBrain {
         val history = ChatMemory.history(botId, chatId)
         if (history.isNotEmpty()) trace?.invoke("Контекст: ${history.size} прошлых реплик")
         val prompt = DialogPrompt.build(store.systemPrompt(botId), history, text)
-        return DeviceLlm.ensureLoaded(context, model, engineParams(store, botId))
-            .mapCatching { DeviceLlm.generate("", prompt).getOrThrow() }
+        val params = engineParams(store, botId)
+        return DeviceLlm.ensureLoaded(context, model, params)
+            .mapCatching { DeviceLlm.generate("", prompt, params).getOrThrow() }
             .fold(
                 onSuccess = { reply ->
                     ChatMemory.remember(botId, chatId, text, reply, store.historyLimit(botId))

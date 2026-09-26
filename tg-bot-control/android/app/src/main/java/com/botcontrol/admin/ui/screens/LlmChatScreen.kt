@@ -76,7 +76,7 @@ fun LlmChatScreen(localStore: LocalBotStore, onBack: () -> Unit) {
     var error by remember { mutableStateOf("") }
     var showThinking by remember { mutableStateOf(true) }
 
-    LaunchedEffect(Unit) { systemPrompt = localStore.systemPrompt() }
+    LaunchedEffect(Unit) { systemPrompt = localStore.systemPrompt(localStore.activeBotId()) }
 
     Column(Modifier.fillMaxSize().padding(12.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
@@ -201,7 +201,7 @@ fun LlmChatScreen(localStore: LocalBotStore, onBack: () -> Unit) {
                             }
                             .onSuccess { reply ->
                                 chatHistory.add(question to reply)
-                                val limit = runCatching { localStore.historyLimit() }.getOrDefault(4)
+                                val limit = runCatching { localStore.historyLimit(localStore.activeBotId()) }.getOrDefault(4)
                                 while (chatHistory.size > limit) chatHistory.removeAt(0)
                                 messages = messages + (false to reply)
                             }
@@ -217,7 +217,7 @@ fun LlmChatScreen(localStore: LocalBotStore, onBack: () -> Unit) {
             modifier = Modifier.fillMaxWidth().padding(top = 4.dp).height(70.dp),
         )
         TextButton(onClick = {
-            scope.launch { localStore.setSystemPrompt(systemPrompt); DeviceLlm.log("💾 Характер сохранён") }
+            scope.launch { localStore.setSystemPrompt(systemPrompt, localStore.activeBotId()); DeviceLlm.log("💾 Характер сохранён") }
         }) { Text("Сохранить характер") }
         Spacer(Modifier.height(4.dp))
     }

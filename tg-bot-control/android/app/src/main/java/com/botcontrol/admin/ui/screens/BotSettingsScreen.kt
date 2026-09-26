@@ -182,8 +182,9 @@ fun BotSettingsScreen(localStore: LocalBotStore, repository: com.botcontrol.admi
         Spacer(Modifier.height(4.dp))
         Button(onClick = {
             scope.launch {
-                localStore.setMenuCommands(menu.filter { it.command.isNotBlank() })
-                val token = localStore.botToken()
+                val botId = localStore.activeBotId()
+                localStore.setMenuCommands(menu.filter { it.command.isNotBlank() }, botId)
+                val token = localStore.botToken(botId)
                 if (token.isNullOrBlank()) {
                     error = "Токен не задан — сначала добавь бота"
                     return@launch
@@ -193,7 +194,10 @@ fun BotSettingsScreen(localStore: LocalBotStore, repository: com.botcontrol.admi
                         .map { it.command to it.description })
                     .onSuccess {
                         message = "Меню применено в Telegram — проверь кнопку «Меню» у бота"
-                        DeviceLlm.log("📜 Главное меню применено вручную (${menu.size} команд)")
+                        scope.launch {
+                            com.botcontrol.admin.service.BotLog.log(localStore, botId,
+                                "📜 Главное меню применено вручную (${menu.size} команд)")
+                        }
                     }
                     .onFailure { error = it.message ?: "Не удалось применить меню" }
             }

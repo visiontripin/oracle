@@ -70,7 +70,8 @@ class LitertLmEngine(context: Context) : LlmEngine {
         }
     }
 
-    override suspend fun generate(system: String, user: String): String =
+    // LiteRT-LM: сэмплер задаётся движком, per-call параметры здесь не применяются.
+    override suspend fun generate(system: String, user: String, params: EngineParams?): String =
         withContext(Dispatchers.Default) {
             val e = engine ?: error("модель не загружена")
             val prompt = if (system.isBlank()) user.trim()

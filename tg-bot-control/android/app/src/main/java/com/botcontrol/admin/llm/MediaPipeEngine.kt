@@ -23,6 +23,7 @@ class MediaPipeEngine(context: Context) : LlmEngine {
     private var temperature: Float = 0.8f
     private var topK: Int = 40
     private var seed: Int? = null
+    private var maxTopK: Int = 40
 
     override val kind: String get() = "MediaPipe"
     override val loaded: Boolean get() = llm != null
@@ -40,17 +41,21 @@ class MediaPipeEngine(context: Context) : LlmEngine {
             this@MediaPipeEngine.temperature = params.temperature
             this@MediaPipeEngine.topK = params.topK
             this@MediaPipeEngine.seed = params.seed
+            this@MediaPipeEngine.maxTopK = params.topK
         }
     }
 
-    override suspend fun generate(system: String, user: String): String =
+    override suspend fun generate(system: String, user: String, params: EngineParams?): String =
         withContext(Dispatchers.Default) {
             val engine = llm ?: error("model is not loaded")
             val prompt = buildPrompt(system, user)
             val sessionBuilder = LlmInferenceSession.LlmInferenceSessionOptions.builder()
-                .setTemperature(temperature)
-                .setTopK(topK)
-            seed?.let { sessionBuilder.setRandomSeed(it) }
+                // Сессия создаётся на каждый ответ — берём параметры спросившего
+                // бота. Раньше действовали параметры бота, первым загрузившего
+                // модель. topK не выше заданного при загрузке (setMaxTopK).
+                .setTemperature(params?.temperature ?: temperature)
+                .setTopK((params?.topK ?: topK).coerceIn(1, maxTopK))
+            (params?.seed ?: seed)?.let { sessionBuilder.setRandomSeed(it) }
             LlmInferenceSession.createFromOptions(engine, sessionBuilder.build()).use { session ->
                 session.addQueryChunk(prompt)
                 session.generateResponse()
