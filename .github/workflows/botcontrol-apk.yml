@@ -1,0 +1,140 @@
+# Сборка BotControl (Android) в GitHub Actions.
+# Песочница агента не имеет доступа к Google Maven / Gradle / JDK, поэтому APK
+# собирается здесь. Результат:
+#   • артефакт BotControl-debug-apk (вкладка Actions → запуск → Artifacts);
+#   • аннотация «aapt» с `aapt dump badging` (package / versionCode / versionName);
+#   • если в сообщении коммита есть [apk] — тег botcontrol-v<версия>-code<код>
+#     (коммит с APK внутри, не ветка) + pre-release с файлом BotControl-debug.apk
+#     и всеми готовыми конфигами tg-bot-control/*-ready.py (прямые ссылки).
+name: BotControl APK
+
+on:
+  push:
+    # любая ветка сессии агента (arena/…) и main — новый чат получает новую ветку
+    branches: ["arena/**", "main"]
+    paths:
+      - "tg-bot-control/android/**"
+      - ".github/workflows/botcontrol-apk.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: botcontrol-apk-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Bot isolation check (botId in service/ and data/)
+        run: python3 tg-bot-control/tools/check-bot-isolation.py
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.13"
+
+      - name: Android SDK (platform 35 + build-tools 34.0.0)
+        run: |
+          SDKM="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$SDKM" --licenses > /dev/null || true
+          "$SDKM" "platforms;android-35" "build-tools;34.0.0" > /dev/null
+
+      - name: Assemble debug APK
+        id: build
+        working-directory: tg-bot-control/android
+        run: |
+          set -o pipefail
+          gradle :app:assembleDebug --no-daemon --stacktrace 2>&1 | tee /tmp/build.log
+
+      - name: Build errors → annotation
+        if: failure() && steps.build.outcome == 'failure'
+        run: |
+          # Логи Actions из песочницы агента недоступны — ошибки дублируем аннотацией.
+          ERR=$(grep -E "^e: |error:|What went wrong|Execution failed|Could not|FAILED|Exception:" /tmp/build.log \
+                | grep -v "^\s*at " | head -80 | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
+          echo "::error title=build::${ERR}"
+
+      - name: aapt check
+        id: aapt
+        run: |
+          cp tg-bot-control/android/app/build/outputs/apk/debug/app-debug.apk tg-bot-control/BotControl-debug.apk
+          APK=tg-bot-control/BotControl-debug.apk
+          BADGE=$("$ANDROID_HOME/build-tools/34.0.0/aapt" dump badging "$APK" | grep ^package)
+          SHA=$(sha256sum "$APK" | cut -d' ' -f1)
+          SIZE=$(stat -c%s "$APK")
+          CERT=$("$ANDROID_HOME/build-tools/34.0.0/apksigner" verify --print-certs "$APK" | grep -m1 "SHA-256 digest" | sed 's/.*: //')
+          echo "$BADGE"
+          echo "::notice title=aapt::${BADGE} | size=${SIZE} | sha256=${SHA} | cert-sha256=${CERT}"
+          {
+            echo "badge=${BADGE}"
+            echo "sha=${SHA}"
+            echo "size=${SIZE}"
+            echo "cert=${CERT}"
+          } >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BotControl-debug-apk
+          path: tg-bot-control/BotControl-debug.apk
+          retention-days: 30
+
+      - name: Publish tag + pre-release ([apk] in commit message)
+        if: contains(github.event.head_commit.message, '[apk]')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BADGE: ${{ steps.aapt.outputs.badge }}
+          SHA: ${{ steps.aapt.outputs.sha }}
+          SIZE: ${{ steps.aapt.outputs.size }}
+          CERT: ${{ steps.aapt.outputs.cert }}
+        run: |
+          GRADLE=tg-bot-control/android/app/build.gradle.kts
+          VC=$(grep -oP 'versionCode\s*=\s*\K\d+' "$GRADLE")
+          VN=$(grep -oP 'versionName\s*=\s*"\K[^"]+' "$GRADLE")
+          TAG="botcontrol-v${VN}-code${VC}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -f tg-bot-control/BotControl-debug.apk
+          git commit -q -m "BotControl v${VN} (code ${VC}) — APK из ${GITHUB_SHA::7}"
+          git tag -f "$TAG"
+          git push -f origin "refs/tags/${TAG}"
+          NOTES=/tmp/notes.md
+          {
+            echo "Debug APK, собран из \`${GITHUB_SHA::7}\` (ветка ${GITHUB_REF_NAME})."
+            echo
+            echo "\`\`\`"
+            echo "${BADGE}"
+            echo "size=${SIZE}  sha256=${SHA}"
+            echo "cert sha256=${CERT}"
+            echo "\`\`\`"
+            if [ -f tg-bot-control/RELEASE-NOTES.md ]; then echo; cat tg-bot-control/RELEASE-NOTES.md; fi
+          } > "$NOTES"
+          # К релизу прикладываем APK и все готовые конфиги (*-ready.py),
+          # чтобы у каждого нужного файла была прямая ссылка на скачивание.
+          # + аватар бота (branding/avatar-640.png) — для @BotFather /setuserpic.
+          ASSETS="tg-bot-control/BotControl-debug.apk $(ls tg-bot-control/*-ready.py tg-bot-control/branding/avatar-*.png handoff/*.txt 2>/dev/null | tr '\n' ' ')"
+          {
+            echo
+            echo "## Прямые ссылки на скачивание"
+            for f in $ASSETS; do
+              n=$(basename "$f")
+              echo "- [${n}](https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/${n})"
+            done
+          } >> "$NOTES"
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            gh release upload "$TAG" $ASSETS --clobber
+            gh release edit "$TAG" --notes-file "$NOTES" --prerelease
+          else
+            gh release create "$TAG" $ASSETS \
+              --prerelease --title "BotControl v${VN} (code ${VC})" --notes-file "$NOTES"
+          fi
+          echo "::notice title=release::${TAG}"

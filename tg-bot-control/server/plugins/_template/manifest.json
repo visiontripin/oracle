@@ -1,0 +1,22 @@
+{
+  "id": "my_plugin",
+  "name": "My Plugin",
+  "version": "0.1.0",
+  "description": "Template: rename the folder, edit id/name, set triggers or code.",
+  "enabled": false,
+  "permissions": [],
+  "entrypoint": "main.py",
+  "commands": [
+    {"name": "hello", "description": "Say hello"}
+  ],
+  "triggers": [
+    {
+      "type": "command",
+      "pattern": "/hello",
+      "response_text": "Hello, {user}! You said: {text}",
+      "description": "Static greeting (no code executed)"
+    }
+  ],
+  "dependencies": [],
+  "min_bot_version": "1.0.0"
+}

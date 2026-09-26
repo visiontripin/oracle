@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Логотип BotControl. Сгенерировано branding/make_android_icons.py — не править руками. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="48dp" android:height="48dp"
+    android:viewportWidth="512" android:viewportHeight="512">
+    <group android:scaleX="1" android:scaleY="1" android:translateX="0" android:translateY="0">
+        <path android:pathData="M112,0 H400 A112,112 0 0 1 512,112 V400 A112,112 0 0 1 400,512 H112 A112,112 0 0 1 0,400 V112 A112,112 0 0 1 112,0 Z">
+            <aapt:attr name="android:fillColor">
+                <gradient android:type="linear" android:startX="0" android:startY="0"
+                    android:endX="0" android:endY="512"
+                    android:startColor="#182533" android:endColor="#0E1621" />
+            </aapt:attr>
+        </path>
+        <path android:pathData="M78,262 a178,178 0 1,0 356,0 a178,178 0 1,0 -356,0 Z">
+            <aapt:attr name="android:fillColor">
+                <gradient android:type="linear" android:startX="131.4" android:startY="119.6"
+                    android:endX="380.6" android:endY="422.2"
+                    android:startColor="#5288C1" android:endColor="#2B5278" />
+            </aapt:attr>
+        </path>
+        <path android:fillColor="#FBBF24" android:pathData="M96.5,402 a7.5,7.5 0 1,0 15,0 a7.5,7.5 0 1,0 -15,0 Z M122,377.9 a7.5,7.5 0 1,0 15,0 a7.5,7.5 0 1,0 -15,0 Z M150.7,358 a7.5,7.5 0 1,0 15,0 a7.5,7.5 0 1,0 -15,0 Z M182.3,343 a7.5,7.5 0 1,0 15,0 a7.5,7.5 0 1,0 -15,0 Z" />
+        <group android:scaleX="3.5" android:scaleY="3.5" android:translateX="71.25" android:translateY="78.25">
+            <path android:fillColor="#F5F6F7" android:pathData="M84,26 L24,50 C21.5,51 21.7,54.4 24.3,55.2 L38,59.4 L44,77.5 C44.8,79.9 47.9,80.3 49.4,78.2 L56.6,68.4 L68.5,77.3 C70.7,78.9 73.8,77.7 74.4,75.1 L86.8,29.6 C87.4,27.2 85.6,25.1 84,26 Z" />
+            <path android:fillColor="#C9D7E6" android:pathData="M38,59.4 L72,36 L48.5,66.5 L44,77.5 Z" />
+        </group>
+        <path android:fillColor="#0E1621" android:pathData="M336,128 a56,56 0 1,0 112,0 a56,56 0 1,0 -112,0 Z" />
+        <path android:fillColor="#FBBF24" android:pathData="M342,128 a50,50 0 1,0 100,0 a50,50 0 1,0 -100,0 Z" />
+        <path android:fillColor="#0E1621" android:strokeColor="#0E1621" android:strokeWidth="6" android:strokeLineJoin="round" android:pathData="M377,104 L413,128 L377,152 Z" />
+    </group>
+</vector>

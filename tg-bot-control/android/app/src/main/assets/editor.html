@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Plugin editor</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/dracula.min.css">
+<style>
+  html, body { margin: 0; padding: 0; height: 100%; background: #282a36; }
+  .CodeMirror { height: 100vh; font-size: 14px; }
+  #fallback { display: none; width: 100%; height: 100vh; box-sizing: border-box;
+    background: #282a36; color: #f8f8f2; font-family: monospace; font-size: 14px;
+    border: none; padding: 8px; }
+</style>
+</head>
+<body>
+<textarea id="fallback"></textarea>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/python/python.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/javascript/javascript.min.js"></script>
+<script>
+  var editor = null;
+  var fallback = document.getElementById('fallback');
+  var initial = '';
+  try {
+    initial = Android.getInitialCode() || '';
+  } catch (e) { initial = ''; }
+
+  function modeFor(name) {
+    if (name === 'json') return {name: 'javascript', json: true};
+    return 'python';
+  }
+
+  if (typeof CodeMirror !== 'undefined') {
+    editor = CodeMirror(document.body, {
+      value: initial,
+      mode: 'python',
+      theme: 'dracula',
+      lineNumbers: true,
+      indentUnit: 4,
+      tabSize: 4,
+      lineWrapping: false
+    });
+  } else {
+    // Offline fallback: plain textarea (CDN unreachable)
+    fallback.style.display = 'block';
+    fallback.value = initial;
+  }
+
+  function getCode() {
+    return editor ? editor.getValue() : fallback.value;
+  }
+
+  function setCode(value, mode) {
+    if (editor) {
+      editor.setValue(value || '');
+      editor.setOption('mode', modeFor(mode));
+    } else {
+      fallback.value = value || '';
+    }
+  }
+</script>
+</body>
+</html>
