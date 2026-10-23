@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Иконка: монохром (Android 13+). Сгенерировано branding/make_android_icons.py — не править руками. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <group android:scaleX="0.143" android:scaleY="0.143" android:translateX="16.82" android:translateY="17.392">
+        <path android:fillColor="#FFFFFF" android:pathData="M96.5,402 a7.5,7.5 0 1,0 15,0 a7.5,7.5 0 1,0 -15,0 Z M122,377.9 a7.5,7.5 0 1,0 15,0 a7.5,7.5 0 1,0 -15,0 Z M150.7,358 a7.5,7.5 0 1,0 15,0 a7.5,7.5 0 1,0 -15,0 Z M182.3,343 a7.5,7.5 0 1,0 15,0 a7.5,7.5 0 1,0 -15,0 Z" />
+        <group android:scaleX="3.5" android:scaleY="3.5" android:translateX="71.25" android:translateY="78.25">
+            <path android:fillColor="#FFFFFF" android:pathData="M84,26 L24,50 C21.5,51 21.7,54.4 24.3,55.2 L38,59.4 L44,77.5 C44.8,79.9 47.9,80.3 49.4,78.2 L56.6,68.4 L68.5,77.3 C70.7,78.9 73.8,77.7 74.4,75.1 L86.8,29.6 C87.4,27.2 85.6,25.1 84,26 Z" />
+        </group>
+        <path android:fillColor="#FFFFFF" android:strokeColor="#FFFFFF" android:strokeWidth="6" android:strokeLineJoin="round" android:pathData="M377,104 L413,128 L377,152 Z" />
+    </group>
+</vector>

@@ -1,0 +1,89 @@
+BotControl — СОСТОЯНИЕ, КАРТА ФАЙЛОВ, ОТКРЫТЫЕ ЗАДАЧИ (на момент v1.6.5)
+======================================================================
+
+ВЕРСИЯ
+------
+  v1.6.5 (versionCode 32). Тег: botcontrol-v1.6.5-code32. CI run 36233670815.
+  APK:     https://github.com/visiontripin/oracle/releases/download/botcontrol-v1.6.5-code32/BotControl-debug.apk
+  sha256:  01a9286a7606c4cb1ad0880c9e0d4d1757b0e1b92035f8e1c46312e5892903ac
+  cert:    2ecc9b73dd43d0b40cd032c3e83d2e7f4a549680d513a10b7ed5510e51e20d5e
+  Пакет:   com.botcontrol.admin.debug (debug-сборка, ставится поверх, боты сохраняются)
+  СЛЕДУЮЩАЯ: versionCode 33.
+
+ИСТОРИЯ ПОСЛЕДНИХ ВЕРСИЙ (подробно — RELEASE-NOTES.md и ПЕРЕДАЧА-КОНТЕКСТА.md, раздел 9)
+  1.6.0  анимации правкой одного сообщения (10 шаблонов + свои кадры), кубики, бот №2 «Агент Смит»
+  1.6.1  фото-анимация (кадры-картинки в одном сообщении, кеш file_id)
+  1.6.2  бот-презентация presentation-bot-ready.py, логотип и иконка, карточка GitHub, docs/
+  1.6.3  изоляция ботов: уточняющие вопросы, запасной ответ и кулдаун по botId; владелец
+         наборов; метка [@бот] в журнале; подтверждение удалений; CI-страж; уборка репо
+  1.6.4  параметры ИИ своего бота на каждый запрос; метки в строках экранов
+  1.6.5  версия приложения в строке «🚀 Бот запущен»
+
+БОТЫ ПОЛЬЗОВАТЕЛЯ (живут на его телефоне; токенов в git НЕТ)
+  @AppBotcontrol_bot  — бот-презентация (tg-bot-control/presentation-bot-ready.py, 17 правил)
+  @Daromvpl_bot       — бот объявлений «Даром в ПЛ» (режим «Объявления», канал @daromvpl)
+  @OneDope_bot        — небольшой бот (2 правила)
+  «Агент Смит / перекур» — smith-bot-ready.py / bot-config-ready.py (оракл-бот)
+
+ССЫЛКИ
+  Репозиторий       https://github.com/visiontripin/oracle
+  Ветка             https://github.com/visiontripin/oracle/tree/arena/01a0d2d9-oracle
+  PR #1 → main      https://github.com/visiontripin/oracle/pull/1
+  Релизы            https://github.com/visiontripin/oracle/releases
+  Actions           https://github.com/visiontripin/oracle/actions
+  Память проекта    https://github.com/visiontripin/oracle/blob/arena/01a0d2d9-oracle/tg-bot-control/ПЕРЕДАЧА-КОНТЕКСТА.md
+  Веб-страница      docs/index.html (GitHub Pages, когда пользователь включит: main /docs)
+  Matrix Links      https://github.com/visiontripin/oracle/blob/arena/01a0d2d9-oracle/task.txt
+
+КАРТА ФАЙЛОВ (корень репозитория)
+  README.md                      индекс репозитория и текущая доставка
+  handoff/*.txt                  эти инструкции (прикладываются к каждому релизу)
+  .github/workflows/             botcontrol-apk.yml (сборка/релиз), botcontrol-attach.yml (файлы к релизу)
+  docs/                          веб-страница проекта, matrix-links.html (= task.txt), assets/
+  task.txt                       страница-хаб «Matrix Links» (CRLF) с неоновым логотипом и кнопкой GitHub
+  tg-bot-control/
+    ПЕРЕДАЧА-КОНТЕКСТА.md        ПОЛНАЯ память проекта (читать первым делом)
+    RELEASE-NOTES.md             заметки к релизам (новая версия сверху, идут в описание релиза)
+    Инструкция-код-бота.md       как писать и править конфиги ботов, грамматика импорта
+    Промт-создание-ботов.md      промт для генерации конфигов (он же есть в приложении)
+    Фичи-даромвпл.md             roadmap бота объявлений
+    *-ready.py                   готовые конфиги ботов (прикладываются к релизам)
+    branding/                    logo.svg (исходник), avatar-640.png, slides/, генераторы
+    tools/check-bot-isolation.py CI-страж изоляции ботов
+    tools/kotlin-harness/        компиляция импортёра и экспортёра без Android + isolation.sh
+    tools/import-fixtures/       конфиги-фикстуры для регрессии импорта
+    server/                      FastAPI-сервер из исходного замысла (не развивался)
+    android/app/src/main/java/com/botcontrol/admin/
+      data/     LocalBotStore (настройки по botId), BotRepository, BotExtras (модели),
+                ScriptImporter + PySource (импорт .py), SettingsExporter (экспорт .py),
+                Anim (спецификации анимаций), telegram/TelegramApi
+      service/  LocalBotService (long polling, кнопки, планировщик), BotBrain (правила →
+                сценарий → кулдаун → запасной ответ), AnimPlayer, ListingEngine (объявления),
+                BotLog (журнал с [@бот]), FileServer, LlmAgentService
+      llm/      DeviceLlm, LlmEngine, LitertLmEngine, MediaPipeEngine, ModelStore, DialogPrompt
+      ui/       screens/* (BotTreeScreen — дерево бота, делает его активным), components/*
+                (ConfirmDelete, AnimEditor, MenuEditor, BrandCard), theme/, navigation/NavGraph
+
+ОТКРЫТЫЕ ЗАДАЧИ ДЛЯ ПОЛЬЗОВАТЕЛЯ (напоминать)
+  1. Отозвать токен бота 8709443116 в @BotFather (/revoke). Он был в удалённом
+     botcontrol-handoff.zip и остался в истории git.
+  2. Влить PR #1 в main (он MERGEABLE).
+  3. Включить GitHub Pages: Settings → Pages → main, /docs.
+  4. Установить v1.6.5 и прислать свежий лог, если ещё что-то «течёт» между ботами.
+
+ТЕХДОЛГ (по желанию, не поручено)
+  • CI: обновить actions до версий на Node 24 (setup-java@v5 и т. д.). Перед
+    этим проверить, что теги действительно существуют.
+  • Раздел 4 ПЕРЕДАЧА-КОНТЕКСТА.md содержит устаревшие примеры (v1.5.2,
+    pyaxmlparser). Актуальный рецепт — handoff/02-build-release.txt.
+  • LiteRT-LM не применяет температуру и top-K бота на каждый запрос: нет
+    проверенного API сэмплера.
+
+ИДЕИ (из раздела 10 и Фичи-даромвпл.md; не поручено)
+  • Настоящий медиаальбом (sendMediaGroup) при публикации объявлений.
+  • Редактирование фото в визарде объявления, валидация шагов визарда.
+  • Статистика по пользователям, модерация владельцем (уведомления админу,
+    deeplink), лимиты публикаций на пользователя.
+  • Серверная часть (FastAPI/JWT) из исходного замысла.
+  • Вариант аватара и слайдов в матрично-неоновом стиле, как на странице
+    Matrix Links (пользователь намекал; не подтверждено).

@@ -1,0 +1,50 @@
+# Прикладывает готовые конфиги (tg-bot-control/*-ready.py) к текущему
+# релизу BotControl (тег botcontrol-v<versionName>-code<versionCode> из
+# build.gradle.kts) — без пересборки APK. Срабатывает, когда меняются
+# конфиги. Итог: у каждого файла прямая ссылка
+# https://github.com/<repo>/releases/download/<тег>/<имя файла>.
+name: BotControl attach configs
+
+on:
+  push:
+    # любая ветка сессии агента (arena/…) и main — новый чат получает новую ветку
+    branches: ["arena/**", "main"]
+    paths:
+      - "tg-bot-control/*-ready.py"
+      - "handoff/*.txt"
+      - ".github/workflows/botcontrol-attach.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  attach:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Upload *-ready.py to the current release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          GRADLE=tg-bot-control/android/app/build.gradle.kts
+          VC=$(grep -oP 'versionCode\s*=\s*\K\d+' "$GRADLE")
+          VN=$(grep -oP 'versionName\s*=\s*"\K[^"]+' "$GRADLE")
+          TAG="botcontrol-v${VN}-code${VC}"
+          # конфиги ботов + инструкции для нового чата (handoff/*.txt)
+          FILES=$(ls tg-bot-control/*-ready.py handoff/*.txt 2>/dev/null)
+          # Релиз может ещё собираться (сборка APK) — ждём до ~15 минут.
+          for i in $(seq 1 30); do
+            gh release view "$TAG" > /dev/null 2>&1 && break
+            echo "жду релиз $TAG ($i/30)…"; sleep 30
+          done
+          if ! gh release view "$TAG" > /dev/null 2>&1; then
+            echo "::warning title=attach::релиз $TAG не найден — конфиги не приложены"
+            exit 0
+          fi
+          gh release upload "$TAG" $FILES --clobber
+          for f in $FILES; do
+            n=$(basename "$f")
+            echo "::notice title=link::https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/${n}"
+          done

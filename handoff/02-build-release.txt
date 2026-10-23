@@ -1,0 +1,122 @@
+BotControl — СБОРКА APK, ПРОВЕРКА, РЕЛИЗ И ССЫЛКИ (рабочий рецепт, проверен на v1.6.3–v1.6.5)
+============================================================================================
+
+ПОЧЕМУ В CI: в песочнице агента закрыты dl.google.com, maven.google.com, Maven
+Central и services.gradle.org, поэтому Android SDK и Gradle-зависимости не
+скачать. APK собирает GitHub Actions:
+  .github/workflows/botcontrol-apk.yml     — сборка, aapt, артефакт; при [apk] ещё тег и pre-release
+  .github/workflows/botcontrol-attach.yml  — прикладывает *-ready.py и handoff/*.txt к текущему релизу
+                                             без пересборки (при изменении этих файлов)
+Триггер: push в ветки "arena/**" и "main" (paths: tg-bot-control/android/** или сам workflow).
+Изменение файла workflow само запускает сборку (без [apk] — только артефакт, без релиза).
+
+------------------------------------------------------------------
+ШАГ 0. Рабочая копия актуальна (её иногда молча сбрасывает до «Initial commit»!)
+------------------------------------------------------------------
+  cd /home/user/oracle && git log --oneline -1
+  # если видишь «Initial commit» или чужой HEAD:
+  git fetch origin <твоя-ветка> && git reset --hard FETCH_HEAD && git clean -fd
+  Пушь промежуточные результаты почаще, чтобы сброс не съел работу.
+
+------------------------------------------------------------------
+ШАГ 1. Версия (СНАЧАЛА)
+------------------------------------------------------------------
+  tg-bot-control/android/app/build.gradle.kts:
+      versionCode = 33          # текущий 32 → следующий 33
+      versionName = "1.6.6"
+
+------------------------------------------------------------------
+ШАГ 2. Локальные проверки перед пушем (Android-компилятора нет!)
+------------------------------------------------------------------
+  a) Изоляция ботов (то же делает CI перед сборкой):
+       python3 tg-bot-control/tools/check-bot-isolation.py
+  b) Kotlin-харнесс: импортёр, экспортёр и тест изоляции без Android SDK
+     (JDK и kotlinc берутся из PyPI):
+       python3 -m venv /tmp/ktenv && /tmp/ktenv/bin/pip install -q jdk4py==21.0.8.2 kotlin-jupyter-kernel
+       cd tg-bot-control/tools/kotlin-harness
+       ./isolation.sh                                   # → ISOLATION OK
+       SRC=../../android/app/src/main/java/com/botcontrol/admin/data
+       ./kc.sh /tmp/kout $SRC/PySource.kt $SRC/ScriptImporter.kt $SRC/BotExtras.kt $SRC/Anim.kt \
+               $SRC/SettingsExporter.kt stubs/*.kt stubs2/*.kt src/Dump.kt src/RoundTrip.kt
+       for f in ../../*-ready.py ../import-fixtures/*.py; do
+         echo "$(basename $f): $(./run.sh /tmp/kout RoundTripKt $f | grep ^ROUNDTRIP)"; done
+       # ожидается ROUNDTRIP OK у всех 11 файлов
+  c) UI и service-код (Compose, Android API) проверяет только сборка в CI.
+     Вычитывай импорты. Удобно делать промежуточный коммит БЕЗ [apk]: CI
+     соберёт артефакт, и так видно, компилируется ли код.
+
+------------------------------------------------------------------
+ШАГ 3. Коммит с [apk] и пуш
+------------------------------------------------------------------
+  git add -A && git commit -m "v1.6.6 (code 33) [apk]: что сделано"
+  git push origin <твоя-ветка>
+  git ls-remote origin <твоя-ветка>        # убедиться, что пуш дошёл
+
+------------------------------------------------------------------
+ШАГ 4. Ждать CI (≈5 минут)
+------------------------------------------------------------------
+  RID=$(gh run list --workflow "BotControl APK" --limit 1 --json databaseId -q '.[0].databaseId')
+  for i in $(seq 1 55); do s=$(gh run view $RID --json status,conclusion -q '.status+" "+.conclusion');
+    case "$s" in completed*) break;; esac; sleep 30; done; echo "$s"
+  # шаги:        gh run view $RID --json jobs -q '.jobs[].steps[] | .name+" → "+.conclusion'
+  # аннотации (строка aapt, тег релиза, ошибки сборки «e: …»):
+  JOB=$(gh run view $RID --json jobs -q '.jobs[0].databaseId')
+  gh api repos/visiontripin/oracle/check-runs/$JOB/annotations -q '.[] | .title+": "+.message'
+  Ожидаемо: «aapt: package: name='com.botcontrol.admin.debug' versionCode='33' versionName='1.6.6'
+  … | sha256=… | cert-sha256=2ecc9b73…e51e20d5e» и «release: botcontrol-v1.6.6-code33».
+  Если сборка упала: ошибки Kotlin есть в той же аннотации (шаг «Build errors → annotation»).
+
+------------------------------------------------------------------
+ШАГ 5. Забрать APK и проверить (release-assets из песочницы НЕ скачиваются)
+------------------------------------------------------------------
+  # gh release download / gh run download / curl ассетов падают. Работает только git:
+  git fetch origin refs/tags/botcontrol-v1.6.6-code33
+  git show FETCH_HEAD:tg-bot-control/BotControl-debug.apk > /tmp/app.apk
+  sha256sum /tmp/app.apk                    # = sha256 из аннотации aapt
+  gh release view botcontrol-v1.6.6-code33 --json assets -q '.assets[].name'
+
+  # Сертификат подписи (APK Signature Scheme v2) — должен совпасть с эталоном:
+python3 - <<'EOF'
+import struct, hashlib
+d = open('/tmp/app.apk', 'rb').read()
+e = d.rfind(b'PK\x05\x06'); cd = struct.unpack('<I', d[e+16:e+20])[0]
+assert d[cd-16:cd] == b'APK Sig Block 42'
+sz = struct.unpack('<Q', d[cd-24:cd-16])[0]; blk = d[cd-sz-8:cd-24]; i = 8
+while i < len(blk):
+    ln, idv = struct.unpack('<QI', blk[i:i+12]); v = blk[i+12:i+8+ln]
+    if idv == 0x7109871a:
+        p = 8; p += 4
+        dg = struct.unpack('<I', v[p:p+4])[0]; p += 4 + dg
+        p += 4; cl = struct.unpack('<I', v[p:p+4])[0]; p += 4
+        print('cert', hashlib.sha256(v[p:p+cl]).hexdigest())
+    i += 8 + ln
+EOF
+  # эталон: 2ecc9b73dd43d0b40cd032c3e83d2e7f4a549680d513a10b7ed5510e51e20d5e
+
+  # Новый код реально попал в APK (строки ищутся в dex):
+  python3 -c "import zipfile;z=zipfile.ZipFile('/tmp/app.apk');b=b''.join(z.read(n) for n in z.namelist() if n.endswith('.dex'));print('МояСтрока'.encode() in b)"
+
+------------------------------------------------------------------
+ШАГ 6. Документы и сводка
+------------------------------------------------------------------
+  • RELEASE-NOTES.md: новая версия сверху (текст попадает в описание релиза,
+    поэтому пиши его ДО коммита с [apk]).
+  • ПЕРЕДАЧА-КОНТЕКСТА.md: раздел 2 (версия, что нового, sha256, тег, CI run), раздел 9 (история).
+  • README.md (корень): «Текущая доставка» и следующий versionCode.
+  • Коммит «docs: vX доставлен» (без [apk]) и пуш.
+  • Сводка пользователю на русском, с прямыми ссылками:
+      https://github.com/visiontripin/oracle/releases/download/botcontrol-v1.6.6-code33/BotControl-debug.apk
+      https://github.com/visiontripin/oracle/releases/download/botcontrol-v1.6.6-code33/presentation-bot-ready.py
+      (и другие нужные *-ready.py, avatar-640.png, *.txt)
+
+------------------------------------------------------------------
+PR И GITHUB
+------------------------------------------------------------------
+  • PR #1: https://github.com/visiontripin/oracle/pull/1 (ветка arena/01a0d2d9-oracle → main).
+  • `gh pr edit` падает (ошибка GraphQL «Projects (classic) deprecated»). Правь через REST:
+      gh api -X PATCH repos/visiontripin/oracle/pulls/1 -f title="…" -F body=@/tmp/body.md
+  • GitHub Pages через API недоступен (403). Pages включает пользователь:
+    Settings → Pages → main, папка /docs.
+  • raw.githubusercontent.com из песочницы недоступен. Файлы из репозитория читай так:
+      gh api "repos/visiontripin/oracle/contents/<путь>?ref=<ветка|тег>" -q .content | base64 -d
+  • В CI есть предупреждения про Node 20 и setup-java@v4. Сборку они не ломают.

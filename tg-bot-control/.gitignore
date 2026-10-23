@@ -1,0 +1,26 @@
+__pycache__/
+*.py[cod]
+.venv/
+server/.env
+server/data/
+server/backups/
+*.log
+.DS_Store
+# Android
+android/.gradle/
+android/app/build/
+android/build/
+android/local.properties
+*.apk
+*.aab
+android/.kotlin/
+android/gradlew
+android/gradlew.bat
+android/gradle/wrapper/gradle-wrapper.jar
+
+# Kotlin-харнесс
+out/
+out*/
+out2/
+out3/
+out4/

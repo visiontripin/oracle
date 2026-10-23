@@ -1,0 +1,35 @@
+{
+  "id": "welcome",
+  "name": "Welcome Greeter",
+  "version": "1.0.0",
+  "description": "Codeless plugin: answers /start and greetings with static text. No Python executed.",
+  "enabled": true,
+  "permissions": [],
+  "entrypoint": "main.py",
+  "commands": [
+    {"name": "start", "description": "Welcome message"},
+    {"name": "help", "description": "Show help"}
+  ],
+  "triggers": [
+    {
+      "type": "command",
+      "pattern": "/start",
+      "response_text": "Welcome, {user}! I am online. Try /help.",
+      "description": "Greet on /start"
+    },
+    {
+      "type": "command",
+      "pattern": "/help",
+      "response_text": "Available: /start, /help, /ping",
+      "description": "Help text"
+    },
+    {
+      "type": "contains",
+      "pattern": "hello bot",
+      "response_text": "Hello, {user}!",
+      "description": "React to greeting phrase"
+    }
+  ],
+  "dependencies": [],
+  "min_bot_version": "1.0.0"
+}

@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Matrix Links</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' rx='112' fill='%23000'/%3E%3Ccircle cx='256' cy='262' r='172' fill='%23001a08' stroke='%2300ff55' stroke-width='26'/%3E%3Cg transform='translate(262 262) scale(3.5) translate(-54.5 -52.5)'%3E%3Cpath fill='%23d4ffd4' d='M84,26 L24,50 C21.5,51 21.7,54.4 24.3,55.2 L38,59.4 L44,77.5 C44.8,79.9 47.9,80.3 49.4,78.2 L56.6,68.4 L68.5,77.3 C70.7,78.9 73.8,77.7 74.4,75.1 L86.8,29.6 C87.4,27.2 85.6,25.1 84,26 Z'/%3E%3C/g%3E%3Ccircle cx='392' cy='128' r='56' fill='%2300ff55' stroke='%23000' stroke-width='12'/%3E%3Cpath d='M377 104 L413 128 L377 152 Z' fill='%23000'/%3E%3C/svg%3E">
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
 html, body {
@@ -203,6 +204,134 @@ canvas { display: block; width: 100%; height: 100%; }
   80% { transform: skew(1deg); }
   100% { transform: skew(0deg); }
 }
+/* ---------- логотип BotControl: появляется в цикле вместе с «BotControl App» ---------- */
+.bc-logo {
+  flex: 0 0 100%;
+  display: flex;
+  justify-content: center;
+  margin-bottom: 0.18em;
+  opacity: 0;
+  color: #00c83a;
+  pointer-events: none;
+}
+.bc-logo svg {
+  width: clamp(64px, 1.75em, 170px);
+  height: clamp(64px, 1.75em, 170px);
+  overflow: visible;
+  filter: drop-shadow(0 0 6px #00ff55);
+  transition: filter 0.35s;
+}
+.bc-logo .l-tile  { fill: rgba(0, 40, 12, 0.55); stroke: currentColor; stroke-width: 8; }
+.bc-logo .l-disc  { fill: rgba(0, 255, 85, 0.07); stroke: currentColor; stroke-width: 10; }
+.bc-logo .l-trail { fill: none; stroke: currentColor; stroke-width: 15; stroke-linecap: round; stroke-dasharray: 1 34; }
+.bc-logo .l-plane { fill: currentColor; stroke: currentColor; stroke-width: 1.2; stroke-linejoin: round; }
+.bc-logo .l-fold  { fill: #000; fill-opacity: 0.4; }
+.bc-logo .l-badge { fill: #000; stroke: currentColor; stroke-width: 10; }
+.bc-logo .l-play  { fill: currentColor; stroke: currentColor; stroke-width: 6; stroke-linejoin: round; }
+.bc-logo * { transition: fill 0.35s, stroke 0.35s, fill-opacity 0.35s, color 0.2s; }
+/* расшифровка: как буквы — рябь глифов → зафиксировано */
+.bc-logo.show { opacity: 1; animation: logo-decode 0.76s steps(1, end) both; }
+.bc-logo.locked { color: #d4ffd4; }
+.bc-logo.locked svg { filter: drop-shadow(0 0 4px #fff) drop-shadow(0 0 10px #0f0) drop-shadow(0 0 26px #0a0); }
+.bc-logo.glitch svg { animation: glitch-anim 0.15s 1; }
+.bc-logo.glitch { color: #9f9; }
+/* «сигнал» приложения: на миг логотип в настоящих цветах BotControl */
+.bc-logo.true-color .l-tile  { fill: #17212B; stroke: #33475A; }
+.bc-logo.true-color .l-disc  { fill: #2B5278; stroke: #5288C1; }
+.bc-logo.true-color .l-trail { stroke: #FBBF24; }
+.bc-logo.true-color .l-plane { fill: #F5F6F7; stroke: #F5F6F7; }
+.bc-logo.true-color .l-fold  { fill: #C9D7E6; fill-opacity: 1; }
+.bc-logo.true-color .l-badge { fill: #FBBF24; stroke: #0E1621; }
+.bc-logo.true-color .l-play  { fill: #0E1621; stroke: #0E1621; }
+.bc-logo.true-color svg { filter: drop-shadow(0 0 10px rgba(82, 136, 193, 0.9)) drop-shadow(0 0 30px rgba(43, 82, 120, 0.8)); }
+#oracle.done:hover .bc-logo .l-tile  { fill: #17212B; stroke: #33475A; }
+#oracle.done:hover .bc-logo .l-disc  { fill: #2B5278; stroke: #5288C1; }
+#oracle.done:hover .bc-logo .l-trail { stroke: #FBBF24; }
+#oracle.done:hover .bc-logo .l-plane { fill: #F5F6F7; stroke: #F5F6F7; }
+#oracle.done:hover .bc-logo .l-fold  { fill: #C9D7E6; fill-opacity: 1; }
+#oracle.done:hover .bc-logo .l-badge { fill: #FBBF24; stroke: #0E1621; }
+#oracle.done:hover .bc-logo .l-play  { fill: #0E1621; stroke: #0E1621; }
+.bc-logo.out { animation: logo-out 0.68s steps(1, end) forwards; }
+@keyframes logo-decode {
+  0%   { opacity: 0.2; clip-path: inset(0 0 78% 0); transform: translateX(-6px); }
+  12%  { opacity: 0.9; clip-path: inset(40% 0 35% 0); transform: translateX(5px); }
+  25%  { opacity: 0.4; clip-path: inset(0 0 55% 0); transform: translateX(-3px); }
+  38%  { opacity: 1;   clip-path: inset(62% 0 0 0); transform: translateX(4px); }
+  52%  { opacity: 0.6; clip-path: inset(0 0 30% 0); transform: translateX(-2px); }
+  66%  { opacity: 1;   clip-path: inset(20% 0 10% 0); transform: translateX(2px); }
+  82%  { opacity: 0.8; clip-path: inset(0 0 8% 0); transform: translateX(-1px); }
+  100% { opacity: 1;   clip-path: inset(0 0 0 0); transform: none; }
+}
+@keyframes logo-out {
+  0%   { opacity: 1;   clip-path: inset(0 0 0 0); transform: none; }
+  20%  { opacity: 0.7; clip-path: inset(0 0 25% 0); transform: translateX(4px); }
+  40%  { opacity: 0.9; clip-path: inset(35% 0 20% 0); transform: translateX(-5px); }
+  60%  { opacity: 0.4; clip-path: inset(0 0 60% 0); transform: translateX(3px); }
+  80%  { opacity: 0.2; clip-path: inset(70% 0 0 0); transform: translateX(-2px); }
+  100% { opacity: 0;   clip-path: inset(0 0 100% 0); transform: none; }
+}
+
+/* ---------- кнопка GitHub: надёжная (не убегает), в стиле терминала ---------- */
+#gh-btn {
+  position: fixed;
+  top: max(14px, env(safe-area-inset-top));
+  right: max(14px, env(safe-area-inset-right));
+  z-index: 11;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 14px;
+  border: 1px solid #0f0;
+  background: rgba(0, 255, 0, 0.04);
+  box-shadow: 0 0 10px rgba(0, 255, 0, 0.3), inset 0 0 10px rgba(0, 255, 0, 0.1);
+  font-family: "Courier New", monospace;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  color: #0f0;
+  text-shadow: 0 0 5px #0f0;
+  text-decoration: none;
+  pointer-events: auto;
+  opacity: 0;
+  transform: translateY(-8px);
+  transition: opacity 0.4s, transform 0.4s, color 0.2s, background 0.2s, box-shadow 0.2s;
+  animation: btnFlicker 4.2s infinite;
+}
+#gh-btn::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(0deg, rgba(0, 255, 0, 0.12) 0px, transparent 1px, transparent 3px);
+  pointer-events: none;
+}
+#gh-btn svg { width: 18px; height: 18px; fill: currentColor; filter: drop-shadow(0 0 4px #0f0); flex: none; }
+#gh-btn span { position: relative; white-space: pre; }
+#gh-btn.show { opacity: 1; transform: none; }
+#gh-btn:hover, #gh-btn:focus-visible {
+  color: #d4ffd4;
+  background: rgba(0, 255, 0, 0.12);
+  box-shadow: 0 0 18px rgba(0, 255, 0, 0.6), inset 0 0 14px rgba(0, 255, 0, 0.25);
+  outline: none;
+}
+/* пока в цикле «BotControl App» — кнопка подсвечена: это его исходники */
+#gh-btn.hot {
+  color: #d4ffd4;
+  border-color: #9f9;
+  box-shadow: 0 0 16px rgba(0, 255, 0, 0.55), 0 0 36px rgba(0, 160, 0, 0.35), inset 0 0 12px rgba(0, 255, 0, 0.2);
+}
+#gh-btn.collapsing {
+  transition: all 1.2s cubic-bezier(0.8, 0, 1, 0.2) !important;
+  top: 50% !important;
+  right: 50% !important;
+  transform: translate(50%, -50%) scale(0.2) !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+@media (max-width: 420px) {
+  #gh-btn { height: 36px; padding: 0 10px; font-size: 13px; letter-spacing: 1px; }
+}
+
 #tv-effect {
   position: fixed;
   inset: 0;
@@ -228,6 +357,11 @@ canvas { display: block; width: 100%; height: 100%; }
   <a id="oracle" class="inactive" href="#" target="_blank" rel="noopener noreferrer"></a>
 </div>
 <a id="bottom-btn" href="#" target="_blank" rel="noopener noreferrer"><span id="btn-text"></span></a>
+<a id="gh-btn" href="https://github.com/visiontripin/oracle" target="_blank" rel="noopener noreferrer"
+   title="GitHub → visiontripin/oracle" aria-label="GitHub: исходники BotControl (visiontripin/oracle)">
+  <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+  <span id="gh-text">GITHUB</span>
+</a>
 <div id="typing-el"></div>
 <div class="scanlines"></div>
 <div id="tv-effect"></div>
@@ -239,6 +373,8 @@ const oracleEl = document.getElementById('oracle');
 const typingEl = document.getElementById('typing-el');
 const bottomBtn = document.getElementById('bottom-btn');
 const btnText = document.getElementById('btn-text');
+const ghBtn = document.getElementById('gh-btn');
+const ghText = document.getElementById('gh-text');
 
 const GLYPHS = 'アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヲン0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 const S = 18;
@@ -257,6 +393,25 @@ const TITLES = [
   { word: 'BotControl\nApp', url: 'https://t.me/AppBotcontrol_bot' }
 ];
 const SPECIAL_TITLE = { word: 'ONEDOPEA', url: 'https://t.me/onedopea' };
+
+// Логотип BotControl (геометрия — tg-bot-control/branding/logo.svg), в неоновом стиле страницы.
+// Показывается над «BotControl App» и живёт по тем же фазам цикла, что и буквы.
+const BOTCONTROL_INDEX = TITLES.findIndex(t => t.url.indexOf('AppBotcontrol_bot') !== -1);
+const LOGO_SVG =
+  '<svg viewBox="0 0 512 512" aria-hidden="true">' +
+  '<rect class="l-tile" x="8" y="8" width="496" height="496" rx="108"/>' +
+  '<circle class="l-disc" cx="256" cy="262" r="178"/>' +
+  '<path class="l-trail" d="M104 402 Q 150 352 212 336"/>' +
+  '<g transform="translate(262 262) scale(3.5) translate(-54.5 -52.5)">' +
+  '<path class="l-plane" d="M84,26 L24,50 C21.5,51 21.7,54.4 24.3,55.2 L38,59.4 L44,77.5 C44.8,79.9 47.9,80.3 49.4,78.2 L56.6,68.4 L68.5,77.3 C70.7,78.9 73.8,77.7 74.4,75.1 L86.8,29.6 C87.4,27.2 85.6,25.1 84,26 Z"/>' +
+  '<path class="l-fold" d="M38,59.4 L72,36 L48.5,66.5 L44,77.5 Z"/>' +
+  '</g>' +
+  '<circle class="l-badge" cx="392" cy="128" r="50"/>' +
+  '<path class="l-play" d="M377 104 L413 128 L377 152 Z"/>' +
+  '</svg>';
+const GH_LABEL = 'GITHUB';
+let logoEl = null;
+let ghDecodeTimer = null;
 
 const START_DELAY = 1400;
 const LETTER_STEP = 230;
@@ -475,6 +630,32 @@ function updateBottomBtn(index) {
   }
 }
 
+// Надпись кнопки GitHub расшифровывается из глифов, как заголовки.
+function decodeGhLabel() {
+  if (ghDecodeTimer) clearInterval(ghDecodeTimer);
+  let step = 0;
+  ghDecodeTimer = setInterval(() => {
+    step++;
+    const locked = Math.floor(step / 3);
+    let txt = '';
+    for (let i = 0; i < GH_LABEL.length; i++) txt += i < locked ? GH_LABEL[i] : randomGlyph();
+    ghText.textContent = txt;
+    if (locked >= GH_LABEL.length) { clearInterval(ghDecodeTimer); ghDecodeTimer = null; ghText.textContent = GH_LABEL; }
+  }, 45);
+}
+
+function showGhBtn(hot) {
+  const wasHidden = !ghBtn.classList.contains('show') || ghBtn.classList.contains('collapsing');
+  ghBtn.classList.remove('collapsing');
+  ghBtn.classList.add('show');
+  ghBtn.classList.toggle('hot', !!hot);
+  if (wasHidden || hot) decodeGhLabel();
+}
+
+function hideGhBtn() {
+  ghBtn.classList.remove('show', 'hot');
+}
+
 function setupTitle(index, startAt = performance.now()) {
   currentTitleIndex = index;
   const item = index === -1 ? SPECIAL_TITLE : TITLES[index];
@@ -489,6 +670,15 @@ function setupTitle(index, startAt = performance.now()) {
     oracleEl.classList.add('inactive');
   }
   oracleEl.innerHTML = '';
+
+  // логотип — первым рядом внутри ссылки (кликабелен, входит в safe zone)
+  logoEl = null;
+  if (index === BOTCONTROL_INDEX) {
+    logoEl = document.createElement('div');
+    logoEl.className = 'bc-logo';
+    logoEl.innerHTML = LOGO_SVG;
+    oracleEl.appendChild(logoEl);
+  }
 
   letters = item.word.split('').map(ch => {
     const span = document.createElement('span');
@@ -512,9 +702,12 @@ function setupTitle(index, startAt = performance.now()) {
   titlePhase = 'appearing';
   phaseStart = startAt;
   updateBottomBtn(index);
+  if (index === BOTCONTROL_INDEX) showGhBtn(true);
+  else if (ghBtn.classList.contains('hot')) ghBtn.classList.remove('hot');
 }
 
 setupTitle(0, performance.now() + START_DELAY);
+setTimeout(() => showGhBtn(false), START_DELAY);
 
 function setupTyping(now) {
   typingEl.innerHTML = '';
@@ -531,6 +724,7 @@ function setupTyping(now) {
   currentTypingIndex = 0;
   typingStartTime = now;
   bottomBtn.style.display = 'none';
+  hideGhBtn();
 }
 
 function updateTyping(now) {
@@ -569,6 +763,7 @@ function updateTyping(now) {
       titlePhase = 'between';
       pendingTitleIndex = -1;
       phaseStart = now + 400;
+      setTimeout(() => showGhBtn(false), 400);
     }
   }
 }
@@ -578,6 +773,8 @@ function triggerTvOff() {
   collapseStart = performance.now();
   rainActive = false;
   bottomBtn.classList.add('collapsing');
+  ghBtn.classList.remove('hot');
+  ghBtn.classList.add('collapsing');
   if (btnGlitchInterval) { clearInterval(btnGlitchInterval); btnGlitchInterval = null; }
   drops.forEach(d => { d.collapsing = true; d.vx = 0; d.vy = 0; });
   crumbs.forEach(c => { c.collapsing = true; });
@@ -594,6 +791,7 @@ function updateCenterTitle(now) {
 
   if (titlePhase === 'appearing') {
     const t = now - phaseStart;
+    if (logoEl && !logoEl.classList.contains('show')) logoEl.classList.add('show');
     letters.forEach((el, i) => {
       if (el.dataset.locked === '1') return;
       const delay = i * LETTER_STEP;
@@ -612,12 +810,27 @@ function updateCenterTitle(now) {
       phaseStart = now;
       oracleEl.classList.remove('inactive');
       oracleEl.classList.add('done');
+      if (logoEl) logoEl.classList.add('locked');
     }
     return;
   }
 
   if (titlePhase === 'hold') {
     const holdDuration = currentTitleIndex === -1 ? 7000 : HOLD_TIME;
+    if (logoEl) {
+      const held = now - phaseStart;
+      if (!logoEl.dataset.flashed && held > 900) {
+        logoEl.dataset.flashed = '1';
+        logoEl.classList.add('true-color');
+        const el = logoEl;
+        setTimeout(() => el.classList.remove('true-color'), 1400);
+      }
+      if (Math.random() < 0.008 && !logoEl.classList.contains('glitch')) {
+        const el = logoEl;
+        el.classList.add('glitch');
+        setTimeout(() => el.classList.remove('glitch'), 90 + Math.random() * 80);
+      }
+    }
     if (currentTitleIndex !== -1) {
       letters.forEach(el => {
         if (el.dataset.locked === '1' && el.dataset.hidden === '0') {
@@ -648,6 +861,10 @@ function updateCenterTitle(now) {
       phaseStart = now;
       oracleEl.classList.remove('done', 'onedopea-mode');
       oracleEl.classList.add('inactive');
+      if (logoEl) {
+        logoEl.classList.remove('locked', 'true-color', 'glitch', 'show');
+        logoEl.classList.add('out');
+      }
       letters.forEach(el => { if (el.dataset.locked !== '1') el.dataset.hidden = '0'; });
     }
     return;
