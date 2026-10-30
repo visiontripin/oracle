@@ -3,9 +3,10 @@ BotControl — СОСТОЯНИЕ, КАРТА ФАЙЛОВ, ОТКРЫТЫЕ З�
 
 ВЕРСИЯ
 ------
-  v1.7.0 (versionCode 33). Тег: botcontrol-v1.7.0-code33.
+  v1.7.0 (versionCode 33). Тег: botcontrol-v1.7.0-code33. CI run 41059512680.
   APK:     https://github.com/visiontripin/oracle/releases/download/botcontrol-v1.7.0-code33/BotControl-debug.apk
-  sha256 / cert / номер CI-запуска — в заметках к релизу на GitHub.
+  sha256:  9bcb42829d91019de59bcfbc3b83eeb93665e7427262b228ae86079c56ffc1ef
+  97 939 275 байт; cert 2ecc9b73dd43d0b40cd032c3e83d2e7f4a549680d513a10b7ed5510e51e20d5e (прежний).
   Пакет:   com.botcontrol.admin.debug (debug-сборка, ставится поверх, боты сохраняются)
   СЛЕДУЮЩАЯ: versionCode 34.
 
