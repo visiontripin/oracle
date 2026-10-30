@@ -23,12 +23,13 @@ cd ../kotlin-harness
 «Запущено» / «Уже работает», 3 набора (100/10/10), 18 уточняющих
 вопросов, temperature 0.7, cooldown 10, typing 4.
 
-## `bot-config-ready.py` (в корне `tg-bot-control/`)
+## `smith-bot-ready.py` (в корне `tg-bot-control/`)
 
 Конфиг «Агент Смит / перекур», приведённый к полной совместимости:
-добавлены состояние `bot_running`, `callback_query_handler` со
-start/stop/smoke-ветками и 4-м элементом кортежа (меню) у всех событий.
-Ожидаемо: тот же разбор, что у оракла, **ноль warnings**.
+характер ИИ (`SYSTEM_PROMPT`), 3 набора (`JOKES` 100 + 10 + 10),
+`callback_query_handler` со start/stop/smoke/joke-ветками и 4-м
+элементом кортежа (меню) у событий. Ожидаемо: тот же разбор, что у
+оракла, **ноль warnings**.
 
 ## `demo-bot-coffee.py` / `kotlin-harness/demo_bot.py`
 

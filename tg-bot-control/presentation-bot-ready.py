@@ -14,7 +14,8 @@
 #   • «▶️ Автотур» — все 8 слайдов сами по очереди;
 #   • демо-команды «фишек»: /progress /matrix /slot /typewriter /countdown
 #     /spinner /quest /dice /howto /links /help;
-#   • кнопки-ссылки: GitHub и страница релизов (скачать APK).
+#   • кнопки-ссылки: GitHub, страница релизов (скачать APK) и презентация
+#     (docs/presentation.html + PDF на GitHub Pages).
 #
 # Слайды лежат в репозитории (tg-bot-control/branding/slides), ссылки
 # закреплены за тегом релиза — картинки не поменяются «под ногами».
@@ -32,6 +33,9 @@ bot = telebot.TeleBot(BOT_TOKEN)
 
 GITHUB_URL = "https://github.com/visiontripin/oracle"
 RELEASES_URL = "https://github.com/visiontripin/oracle/releases"
+# Презентация на GitHub Pages (Settings → Pages → main, папка /docs)
+PRESENTATION_URL = "https://visiontripin.github.io/oracle/presentation.html"
+PRESENTATION_PDF = "https://visiontripin.github.io/oracle/presentation.pdf"
 
 
 # ---------- анимация: одно сообщение правится кадр за кадром ----------
@@ -247,6 +251,8 @@ def main_menu():
            InlineKeyboardButton("🏠 В начало", callback_data="p_home"))
     kb.row(InlineKeyboardButton("⭐ GitHub", url=GITHUB_URL),
            InlineKeyboardButton("⬇️ Скачать APK", url=RELEASES_URL))
+    kb.row(InlineKeyboardButton("📊 Презентация", url=PRESENTATION_URL),
+           InlineKeyboardButton("📄 PDF", url=PRESENTATION_PDF))
     return kb
 
 
@@ -255,6 +261,8 @@ def links_menu():
     kb.row(InlineKeyboardButton("⭐ GitHub", url=GITHUB_URL))
     kb.row(InlineKeyboardButton("⬇️ Релизы / APK", url=RELEASES_URL))
     kb.row(InlineKeyboardButton("📘 README", url="https://github.com/visiontripin/oracle/tree/main/tg-bot-control"))
+    kb.row(InlineKeyboardButton("📊 Презентация (слайды)", url=PRESENTATION_URL))
+    kb.row(InlineKeyboardButton("📄 Презентация (PDF)", url=PRESENTATION_PDF))
     return kb
 
 
@@ -282,7 +290,7 @@ def cmd_help(msg):
                      "/start — обложка и меню разделов\n"
                      "/tour — автотур по всем слайдам\n"
                      "/howto — как запустить своего бота\n"
-                     "/links — GitHub и скачивание APK\n\n"
+                     "/links — GitHub, APK и презентация\n\n"
                      "🎞 Анимации:\n"
                      "/progress — прогресс-бар\n"
                      "/spinner — спиннер\n"
@@ -300,7 +308,8 @@ def cmd_links(msg):
     bot.send_message(msg.chat.id,
                      "🔗 BotControl — открытый проект.\n\n"
                      "Исходники, инструкции и готовые конфиги ботов — на GitHub. "
-                     "APK — на странице релизов (самый верхний релиз — свежий).",
+                     "APK — на странице релизов (самый верхний релиз — свежий).\n"
+                     "📊 Презентация — слайдами в браузере или файлом PDF.",
                      reply_markup=links_menu())
 
 

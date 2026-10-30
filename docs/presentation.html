@@ -1,0 +1,556 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BotControl — презентация: Telegram-боты прямо с телефона</title>
+<meta name="description" content="BotControl — Android-приложение, в котором Telegram-бот живёт на телефоне: без сервера и VPS, с кнопками, анимациями, расписанием, объявлениями и ИИ на устройстве.">
+<meta property="og:title" content="BotControl — Telegram-боты прямо с телефона">
+<meta property="og:description" content="Без сервера и VPS: бот живёт в приложении. Кнопки, анимации, расписание, объявления, ИИ на устройстве.">
+<meta property="og:image" content="assets/slides/01-cover.png">
+<meta name="theme-color" content="#0E1621">
+<link rel="icon" type="image/svg+xml" href="assets/logo.svg">
+<style>
+  /* Палитра приложения (Telegram dark) */
+  :root{--bg:#0E1621;--panel:#17212B;--bubble:#182533;--blue:#2B5278;--blue-l:#5288C1;
+        --text:#F5F6F7;--muted:#7F91A4;--amber:#FBBF24;--line:#33475A}
+  *{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  html,body{margin:0;background:#070D14;color:var(--text);
+       font-family:system-ui,-apple-system,"Segoe UI",Roboto,"DejaVu Sans",sans-serif}
+  a{color:var(--blue-l);text-decoration:none}
+
+  /* ---------- слайд ---------- */
+  .slide{position:relative;width:1280px;height:720px;overflow:hidden;
+         background:radial-gradient(120% 90% at 88% 8%,#1B2B3D 0%,var(--bg) 58%);
+         padding:56px 64px;display:flex;flex-direction:column}
+  .slide:before{content:"";position:absolute;right:-160px;top:-200px;width:620px;height:620px;
+         border-radius:50%;background:radial-gradient(closest-side,rgba(43,82,120,.55),rgba(14,22,33,0));
+         pointer-events:none}
+  .brand{display:flex;align-items:center;gap:12px;position:relative;z-index:2}
+  .brand img{width:44px;height:44px;border-radius:11px}
+  .brand b{font-size:24px}
+  .brand .pageno{margin-left:auto;color:var(--muted);font-size:17px;letter-spacing:.06em}
+  h1{font-size:64px;line-height:1.04;margin:26px 0 0;letter-spacing:-.5px}
+  h1 em{font-style:normal;color:var(--amber)}
+  h2{font-size:44px;line-height:1.1;margin:22px 0 0;letter-spacing:-.3px}
+  .bar{width:96px;height:7px;border-radius:4px;background:var(--amber);margin:16px 0 18px}
+  .lead{font-size:24px;color:#C9D3DD;max-width:720px;margin:0}
+  .muted{color:var(--muted)}
+  .foot{margin-top:auto;color:var(--muted);font-size:16px}
+  .logo-hero{width:300px;filter:drop-shadow(0 28px 60px rgba(0,0,0,.55))}
+
+  /* ---------- обложка ---------- */
+  .cover{display:grid;grid-template-columns:1.15fr .85fr;gap:40px;align-items:center;flex:1}
+  .badge{display:inline-flex;align-items:center;gap:9px;background:var(--bubble);
+         border:1px solid var(--line);border-radius:999px;padding:8px 16px;font-size:16px;color:#C9D3DD}
+  .badge i{width:9px;height:9px;border-radius:50%;background:#4ADE80;display:inline-block}
+  .cta{display:flex;gap:12px;flex-wrap:wrap;margin-top:30px}
+  .btn{display:inline-flex;align-items:center;gap:9px;padding:14px 22px;border-radius:13px;
+       font-weight:650;font-size:18px;color:var(--text);background:var(--blue);
+       border:1px solid transparent}
+  .btn.amber{background:var(--amber);color:#0B1219}
+  .btn.ghost{background:transparent;border-color:var(--blue-l)}
+  .cover-right{display:flex;flex-direction:column;align-items:center;gap:22px}
+  .cover-right .tag{font-size:17px;color:var(--muted);text-align:center;max-width:300px;line-height:1.5}
+
+  /* ---------- карточки ---------- */
+  .cards{display:grid;gap:14px;margin-top:26px}
+  .cards.c2{grid-template-columns:1fr 1fr}
+  .cards.c3{grid-template-columns:repeat(3,1fr)}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:20px 22px}
+  .card .ic{font-size:20px;line-height:1}
+  .card h3{margin:10px 0 7px;font-size:21px}
+  .card p{margin:0;color:#C9D3DD;font-size:17px;line-height:1.45}
+  .card.ok{border-color:#2E6B4F;background:#14251C}
+  .card.ok h3{color:#8FE0B0}
+
+  /* ---------- проблема ---------- */
+  .stripe{margin-top:26px;background:var(--bubble);border:1px solid var(--line);border-radius:14px;
+          padding:16px 22px;font-size:20px;display:flex;gap:12px;align-items:center}
+  .stripe b{color:var(--amber)}
+
+  /* ---------- телефон ---------- */
+  .phone{width:360px;background:var(--panel);border:1px solid var(--line);border-radius:28px;
+         padding:16px 16px 20px;box-shadow:0 30px 60px rgba(0,0,0,.45)}
+  .phone .top{display:flex;align-items:center;gap:10px;margin-bottom:14px}
+  .phone .top img{width:30px;height:30px;border-radius:8px}
+  .phone .top b{font-size:17px}
+  .phone .top span{color:var(--muted);font-size:13px}
+  .bot{background:var(--blue);border-radius:13px;padding:11px 13px;margin-top:9px;font-size:15px}
+  .bot .u{color:#CFE3F5;font-size:12.5px}
+  .bot.alt{background:#20364D}
+  .phone .add{background:var(--bubble);border:1px dashed var(--line);border-radius:13px;
+              padding:11px;text-align:center;font-size:14px;color:#C9D3DD;margin-top:11px}
+  .arrow-note{text-align:center;color:var(--muted);font-size:14px;margin-top:12px}
+
+  /* ---------- слайд «возможности» ---------- */
+  .feat{display:grid;grid-template-columns:1fr 1.12fr;gap:34px;align-items:center;flex:1}
+  .feat ul{list-style:none;margin:14px 0 0;padding:0}
+  .feat li{position:relative;padding-left:30px;margin:13px 0;font-size:19px;color:#DDE5EC;line-height:1.4}
+  .feat li:before{content:"";position:absolute;left:0;top:9px;width:11px;height:11px;
+                  border-radius:50%;background:var(--amber)}
+  .feat .shot{border-radius:18px;overflow:hidden;border:1px solid var(--line);
+               box-shadow:0 24px 50px rgba(0,0,0,.5)}
+  .feat .shot img{display:block;width:100%}
+  .kicker{font-size:17px;letter-spacing:.14em;text-transform:uppercase;color:var(--amber)}
+
+  /* ---------- шаги ---------- */
+  .steps{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-top:28px}
+  .step{background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:24px 22px 24px}
+  .step .n{width:46px;height:46px;border-radius:50%;background:var(--amber);color:#0B1219;
+           font-weight:800;font-size:22px;display:grid;place-items:center;margin-bottom:14px}
+  .step h3{margin:0 0 8px;font-size:22px}
+  .step p{margin:0;color:#C9D3DD;font-size:17px;line-height:1.45}
+  .step code{background:var(--bubble);padding:1px 7px;border-radius:6px;font-size:15px}
+
+  /* ---------- безопасность ---------- */
+  .safe{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-top:26px}
+  .safe .card{padding:24px}
+  .safe .card h3{font-size:22px}
+  .safe .card p{font-size:17px}
+
+  /* ---------- финал ---------- */
+  .final{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-top:30px}
+  .final a.card{display:block;transition:transform .15s,border-color .15s}
+  .final a.card:hover{transform:translateY(-3px);border-color:var(--amber)}
+  .final .card .ic{font-size:22px}
+  .final .card b{display:block;font-size:21px;margin:12px 0 6px}
+  .final .card span{color:#C9D3DD;font-size:16px;line-height:1.4;display:block}
+  .final-note{margin-top:26px;color:var(--muted);font-size:17px}
+  .final-note code{background:var(--bubble);padding:2px 8px;border-radius:6px;color:#DDE5EC}
+
+  /* ---------- экранный режим ---------- */
+  .toolbar{position:fixed;inset:auto 0 0 0;height:60px;display:flex;align-items:center;gap:14px;
+           padding:0 22px;background:rgba(7,13,20,.92);border-top:1px solid var(--line);z-index:20;
+           backdrop-filter:blur(8px)}
+  .toolbar .sp{flex:1}
+  .toolbar button,.toolbar a{background:var(--panel);border:1px solid var(--line);color:var(--text);
+           border-radius:10px;padding:9px 15px;font-size:15px;cursor:pointer;font-family:inherit}
+  .toolbar button:hover,.toolbar a:hover{border-color:var(--blue-l)}
+  .toolbar .count{color:var(--muted);font-size:15px;min-width:64px;text-align:center}
+  .stagewrap{position:fixed;inset:0 0 60px 0;display:grid;place-items:center;overflow:hidden}
+  .stage{width:1280px;height:720px;transform-origin:center center;
+         box-shadow:0 30px 80px rgba(0,0,0,.6);border-radius:6px;overflow:hidden}
+  .slide{display:none}
+  .slide.active{display:flex}
+  .hint{position:fixed;right:18px;top:14px;color:#5E7186;font-size:13px;z-index:20}
+
+  /* ---------- печать / PDF ---------- */
+  @page{size:1280px 720px;margin:0}
+  @media print{
+    html,body{background:var(--bg)}
+    .stagewrap{position:static;display:block;overflow:visible}
+    .stage{width:auto;height:auto;box-shadow:none;border-radius:0;transform:none!important}
+    .toolbar,.hint{display:none!important}
+    .slide{display:flex!important;width:1280px;height:720px;page-break-after:always;
+           break-after:page;break-inside:avoid}
+    .slide:last-child{page-break-after:auto;break-after:auto}
+  }
+  @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+
+<div class="hint">← → листать · F полный экран</div>
+
+<div class="stagewrap">
+<div class="stage" id="stage">
+
+  <!-- 1. ОБЛОЖКА -->
+  <section class="slide active">
+    <div class="brand">
+      <img src="assets/logo.svg" alt="BotControl">
+      <b>BotControl</b>
+      <span class="pageno">01 / 12</span>
+    </div>
+    <div class="cover">
+      <div>
+        <span class="badge"><i></i> Android · открытый проект · без сервера</span>
+        <h1>Telegram-бот,<br>который живёт<br><em>в вашем телефоне</em></h1>
+        <p class="lead" style="margin-top:20px">Ни VPS, ни Termux, ни ежемесячных платежей.
+          Команды, кнопки, анимации, расписание, объявления и ИИ — в одном приложении.</p>
+        <div class="cta">
+          <a class="btn amber" href="https://github.com/visiontripin/oracle/releases/latest">⬇️ Скачать APK</a>
+          <a class="btn" href="https://t.me/AppBotcontrol_bot">🤖 Демо-бот</a>
+          <a class="btn ghost" href="https://github.com/visiontripin/oracle">⭐ GitHub</a>
+        </div>
+      </div>
+      <div class="cover-right">
+        <img class="logo-hero" src="assets/logo.svg" alt="Логотип BotControl">
+        <div class="tag">Бот запускается кнопкой «▶ Запустить» и работает, пока телефон с вами.</div>
+      </div>
+    </div>
+    <div class="foot">github.com/visiontripin/oracle · t.me/AppBotcontrol_bot</div>
+  </section>
+
+  <!-- 2. ПРОБЛЕМА -->
+  <section class="slide">
+    <div class="brand">
+      <img src="assets/logo.svg" alt="">
+      <b>BotControl</b>
+      <span class="pageno">02 / 12</span>
+    </div>
+    <div class="kicker">Проблема</div>
+    <h2>Обычному боту нужен компьютер,<br>который никогда не выключается</h2>
+    <div class="cards c2">
+      <div class="card">
+        <div class="ic">🖥</div>
+        <h3>Аренда сервера</h3>
+        <p>VPS или хостинг — от 300 ₽ в месяц и выше. Платить нужно всё время,
+          даже когда ботом никто не пользуется.</p>
+      </div>
+      <div class="card">
+        <div class="ic">⌨️</div>
+        <h3>Настройка на выходные</h3>
+        <p>Python, виртуальное окружение, systemd, Docker, сертификаты, туннели.
+          Без опыта это несколько вечеров и Stack Overflow.</p>
+      </div>
+      <div class="card">
+        <div class="ic">🔑</div>
+        <h3>Токен и логи в консоли</h3>
+        <p>Токен лежит в файле на сервере, доступ — по SSH с паролем.
+          Одна утечка — и бота угнали.</p>
+      </div>
+      <div class="card">
+        <div class="ic">📉</div>
+        <h3>Упал — и молчит</h3>
+        <p>Обновление системы, кончилась память, отвалился процесс — бот не отвечает,
+          а вы узнаёте об этом от пользователей.</p>
+      </div>
+    </div>
+    <div class="stripe">💸 <span>Итог: бот = <b>аренда</b> + <b>администрирование</b> + <b>ночной дежурный</b>.</span></div>
+  </section>
+
+  <!-- 3. РЕШЕНИЕ -->
+  <section class="slide">
+    <div class="brand">
+      <img src="assets/logo.svg" alt="">
+      <b>BotControl</b>
+      <span class="pageno">03 / 12</span>
+    </div>
+    <div class="kicker">Решение</div>
+    <h2>Сервер не нужен: бот живёт в приложении</h2>
+    <div class="bar"></div>
+    <div class="feat">
+      <div style="display:flex;justify-content:center">
+        <div class="phone">
+          <div class="top">
+            <img src="assets/logo.svg" alt="">
+            <div><b>Мои боты</b><br><span>работают на этом телефоне</span></div>
+          </div>
+          <div class="bot">🟢 @AppBotcontrol_bot<div class="u">бот-презентация · правил: 17</div></div>
+          <div class="bot alt">🟢 @Daromvpl_bot<div class="u">объявления · канал @daromvpl</div></div>
+          <div class="bot alt">⚪️ @OneDope_bot<div class="u">остановлен</div></div>
+          <div class="add">+ Добавить бота</div>
+          <div class="arrow-note">токен от @BotFather — и бот запущен</div>
+        </div>
+      </div>
+      <div>
+        <ul>
+          <li>Телефон уже включён, заряжен и всегда с вами — отдельный сервер не нужен.</li>
+          <li>Ноль платежей за хостинг: приложение бесплатное и открытое.</li>
+          <li>Настройка кнопками: команда, фраза или кнопка → ответ, набор, анимация или ИИ.</li>
+          <li>Сколько угодно ботов на разных токенах, у каждого свои правила и характер.</li>
+          <li>Работает в фоне как обычное приложение: Android 14+ без Termux и root.</li>
+        </ul>
+      </div>
+    </div>
+    <div class="foot">Один APK — и бот готов. Демо: @AppBotcontrol_bot</div>
+  </section>
+
+  <!-- 4. КНОПКИ -->
+  <section class="slide">
+    <div class="brand">
+      <img src="assets/logo.svg" alt="">
+      <b>BotControl</b>
+      <span class="pageno">04 / 12</span>
+    </div>
+    <div class="kicker">Возможности · 1 из 6</div>
+    <h2>Команды, правила и кнопки</h2>
+    <div class="feat" style="margin-top:14px">
+      <div>
+        <ul>
+          <li>Команда, фраза или нажатие кнопки → текст, набор фраз, анимация, расписание или ИИ.</li>
+          <li>Inline-кнопки по рядам, до 12 под сообщением, кнопки-ссылки.</li>
+          <li>Постоянная клавиатура под полем ввода и меню команд Telegram.</li>
+          <li>Всё добавляется диалогами в приложении — писать код не обязательно.</li>
+        </ul>
+      </div>
+      <div class="shot"><img src="assets/slides/02-rules.png" alt="Команды и кнопки BotControl"></div>
+    </div>
+  </section>
+
+  <!-- 5. АНИМАЦИИ -->
+  <section class="slide">
+    <div class="brand">
+      <img src="assets/logo.svg" alt="">
+      <b>BotControl</b>
+      <span class="pageno">05 / 12</span>
+    </div>
+    <div class="kicker">Возможности · 2 из 6</div>
+    <h2>Анимации правкой одного сообщения</h2>
+    <div class="feat" style="margin-top:14px">
+      <div>
+        <ul>
+          <li>10 готовых эффектов: спиннер, прогресс-бар, «Матрица», слот-машина, отсчёт, печатная машинка…</li>
+          <li>Свои кадры: ASCII-заставки, флипбук, текстовый квест.</li>
+          <li>Фото-анимация: картинка меняется в том же сообщении, кеш file_id.</li>
+          <li>Кубики Telegram 🎲 и живой предпросмотр прямо в редакторе.</li>
+        </ul>
+      </div>
+      <div class="shot"><img src="assets/slides/03-anim.png" alt="Анимации BotControl"></div>
+    </div>
+  </section>
+
+  <!-- 6. РАСПИСАНИЕ -->
+  <section class="slide">
+    <div class="brand">
+      <img src="assets/logo.svg" alt="">
+      <b>BotControl</b>
+      <span class="pageno">06 / 12</span>
+    </div>
+    <div class="kicker">Возможности · 3 из 6</div>
+    <h2>Расписание и посты в канал</h2>
+    <div class="feat" style="margin-top:14px">
+      <div>
+        <ul>
+          <li>Напоминания по дням недели, будням и выходным — с кнопками ответа.</li>
+          <li>Кнопки «▶️ Запуск» и «⏹ Стоп» прямо в Telegram: напоминания ставятся на паузу из чата.</li>
+          <li>Публикация в канал по времени, тексты чередуются по дням.</li>
+          <li>Всё живёт в телефоне: серверный cron не нужен.</li>
+        </ul>
+      </div>
+      <div class="shot"><img src="assets/slides/04-schedule.png" alt="Расписание BotControl"></div>
+    </div>
+  </section>
+
+  <!-- 7. ОБЪЯВЛЕНИЯ -->
+  <section class="slide">
+    <div class="brand">
+      <img src="assets/logo.svg" alt="">
+      <b>BotControl</b>
+      <span class="pageno">07 / 12</span>
+    </div>
+    <div class="kicker">Возможности · 4 из 6</div>
+    <h2>Объявления и публикация в канал</h2>
+    <div class="feat" style="margin-top:14px">
+      <div>
+        <ul>
+          <li>Визард: описание → контакт → фото → предпросмотр → пост в канал.</li>
+          <li>«Мои объявления»: статистика, переопубликовать, удалить.</li>
+          <li>Переопубликация убирает старый пост — в канале нет дублей.</li>
+          <li>Готовый конфиг канала: правила, дайджесты, реакции «отдано / занято».</li>
+        </ul>
+      </div>
+      <div class="shot"><img src="assets/slides/07-listings.png" alt="Объявления и канал"></div>
+    </div>
+  </section>
+
+  <!-- 8. ИИ -->
+  <section class="slide">
+    <div class="brand">
+      <img src="assets/logo.svg" alt="">
+      <b>BotControl</b>
+      <span class="pageno">08 / 12</span>
+    </div>
+    <div class="kicker">Возможности · 5 из 6</div>
+    <h2>ИИ прямо на устройстве</h2>
+    <div class="feat" style="margin-top:14px">
+      <div>
+        <ul>
+          <li>Модель (Gemma, Phi-3, Qwen…) работает на телефоне — запросы не уходят в облако.</li>
+          <li>ИИ включается по сценарию: команда <code>/chat</code> или правило с действием «ИИ».</li>
+          <li>У каждого бота свой характер, температура и длина ответа.</li>
+          <li>Обычные функции выполняет код — ИИ не тратится на каждое «привет».</li>
+        </ul>
+      </div>
+      <div class="shot"><img src="assets/slides/06-ai.png" alt="ИИ на устройстве"></div>
+    </div>
+  </section>
+
+  <!-- 9. ИМПОРТ -->
+  <section class="slide">
+    <div class="brand">
+      <img src="assets/logo.svg" alt="">
+      <b>BotControl</b>
+      <span class="pageno">09 / 12</span>
+    </div>
+    <div class="kicker">Возможности · 6 из 6</div>
+    <h2>Импорт и экспорт бота кодом</h2>
+    <div class="feat" style="margin-top:14px">
+      <div>
+        <ul>
+          <li>Вставьте бота на Python (telebot / aiogram) — приложение разложит его по настройкам.</li>
+          <li>Код <b>не исполняется</b>: это текст-описание, а не программа.</li>
+          <li>Понимает команды, правила, меню, обработчики кнопок, наборы, расписание, анимации.</li>
+          <li>Обратный экспорт — рабочий <code>.py</code>, который запускается где угодно.</li>
+        </ul>
+      </div>
+      <div class="shot"><img src="assets/slides/05-import.png" alt="Импорт кода"></div>
+    </div>
+  </section>
+
+  <!-- 10. ТРИ ШАГА -->
+  <section class="slide">
+    <div class="brand">
+      <img src="assets/logo.svg" alt="">
+      <b>BotControl</b>
+      <span class="pageno">10 / 12</span>
+    </div>
+    <div class="kicker">Как начать</div>
+    <h2>Три шага — и бот отвечает</h2>
+    <div class="bar"></div>
+    <div class="steps">
+      <div class="step">
+        <div class="n">1</div>
+        <h3>Скачайте APK</h3>
+        <p>Приложение весит как обычная игра и ставится в один тап.
+          Все обновления — с той же страницы релизов.</p>
+      </div>
+      <div class="step">
+        <div class="n">2</div>
+        <h3>Получите токен</h3>
+        <p>@BotFather → <code>/newbot</code> → имя бота → скопируйте токен.
+          Токен нужен только приложению, в код и логи он не попадает.</p>
+      </div>
+      <div class="step">
+        <div class="n">3</div>
+        <h3>Запустите бота</h3>
+        <p>«+ Добавить бота» → вставьте токен → «▶ Запустить».
+          Дальше правила, кнопки и расписание — кнопками.</p>
+      </div>
+    </div>
+    <div class="stripe">⏱ <span>От установки до первого ответа — <b>около двух минут</b>. Сервер, VPS и терминал не нужны.</span></div>
+  </section>
+
+  <!-- 11. БЕЗОПАСНОСТЬ -->
+  <section class="slide">
+    <div class="brand">
+      <img src="assets/logo.svg" alt="">
+      <b>BotControl</b>
+      <span class="pageno">11 / 12</span>
+    </div>
+    <div class="kicker">Безопасность</div>
+    <h2>Почему это безопасно</h2>
+    <div class="bar"></div>
+    <div class="safe">
+      <div class="card ok">
+        <div class="ic">🔐</div>
+        <h3>Токены зашифрованы</h3>
+        <p>Токен хранится в EncryptedSharedPreferences с ключом Android Keystore.
+          Его нет ни в экспорте настроек, ни в журнале, ни в облаке.</p>
+      </div>
+      <div class="card ok">
+        <div class="ic">🧠</div>
+        <h3>ИИ без облака</h3>
+        <p>Модель работает на телефоне. Сообщения не отправляются сторонним
+          сервисам — единственный внешний адрес остаётся Telegram Bot API.</p>
+      </div>
+      <div class="card ok">
+        <div class="ic">🧩</div>
+        <h3>Код не исполняется</h3>
+        <p>Импорт — это разбор текста в настройки. Приложение никогда не запускает
+          чужой Python: нет ни интерпретатора, ни shell-доступа.</p>
+      </div>
+    </div>
+    <div class="cards c2" style="margin-top:16px">
+      <div class="card">
+        <h3 style="margin-top:0">Боты изолированы друг от друга</h3>
+        <p>Правила, наборы фраз, уточняющие вопросы и паузы хранятся с номером бота:
+          настройки одного не звучат в другом.</p>
+      </div>
+      <div class="card">
+        <h3 style="margin-top:0">Всё под вашим контролем</h3>
+        <p>Удаление — только с подтверждением, журнал событий подписан именем бота,
+          открытый исходный код можно проверить самому.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 12. ПРИЗЫВ -->
+  <section class="slide">
+    <div class="brand">
+      <img src="assets/logo.svg" alt="">
+      <b>BotControl</b>
+      <span class="pageno">12 / 12</span>
+    </div>
+    <div class="kicker">Начните сейчас</div>
+    <h2>Ваш бот уже может жить в телефоне</h2>
+    <div class="bar"></div>
+    <div class="final">
+      <a class="card" href="https://github.com/visiontripin/oracle/releases/latest">
+        <div class="ic">⬇️</div>
+        <b>Скачать APK</b>
+        <span>Страница релизов: свежий BotControl для Android. Установка в один тап.</span>
+      </a>
+      <a class="card" href="https://t.me/AppBotcontrol_bot">
+        <div class="ic">🤖</div>
+        <b>Демо-бот</b>
+        <span>@AppBotcontrol_bot — потрогать кнопки, слайды и анимации прямо в Telegram.</span>
+      </a>
+      <a class="card" href="https://github.com/visiontripin/oracle">
+        <div class="ic">⭐</div>
+        <b>GitHub</b>
+        <span>Исходный код, конфиги ботов и инструкции. Поставьте звезду проекту.</span>
+      </a>
+    </div>
+    <div class="final-note">
+      Презентация файлом: <a href="presentation.pdf">presentation.pdf</a> ·
+      страница проекта: <a href="index.html">index.html</a> ·
+      инструкция по коду бота: <code>Инструкция-код-бота.md</code>
+    </div>
+    <div class="foot">BotControl · открытый проект · Telegram-боты без сервера</div>
+  </section>
+
+</div>
+</div>
+
+<div class="toolbar">
+  <button id="prev" aria-label="Назад">‹</button>
+  <span class="count" id="count">1 / 12</span>
+  <button id="next" aria-label="Вперёд">›</button>
+  <span class="sp"></span>
+  <a href="presentation.pdf">📄 PDF</a>
+  <a href="index.html">🌐 Страница проекта</a>
+  <a href="https://github.com/visiontripin/oracle/releases/latest">⬇️ APK</a>
+</div>
+
+<script>
+(function () {
+  var slides = Array.prototype.slice.call(document.querySelectorAll('.slide'));
+  var i = 0, stage = document.getElementById('stage'), count = document.getElementById('count');
+
+  function fit() {
+    if (window.matchMedia('print').matches) return;
+    var vw = window.innerWidth, vh = window.innerHeight - 60;
+    var s = Math.min(vw / 1280, vh / 720);
+    stage.style.transform = 'scale(' + s + ')';
+  }
+  function show(n) {
+    i = (n + slides.length) % slides.length;
+    slides.forEach(function (el, k) { el.classList.toggle('active', k === i); });
+    count.textContent = (i + 1) + ' / ' + slides.length;
+    if (history.replaceState) history.replaceState(null, '', '#' + (i + 1));
+  }
+  document.getElementById('next').onclick = function () { show(i + 1); };
+  document.getElementById('prev').onclick = function () { show(i - 1); };
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ') { e.preventDefault(); show(i + 1); }
+    else if (e.key === 'ArrowLeft' || e.key === 'PageUp') { e.preventDefault(); show(i - 1); }
+    else if (e.key === 'Home') { show(0); }
+    else if (e.key === 'End') { show(slides.length - 1); }
+    else if (e.key === 'f' || e.key === 'F') {
+      if (document.fullscreenElement) document.exitFullscreen();
+      else document.documentElement.requestFullscreen && document.documentElement.requestFullscreen();
+    }
+  });
+  window.addEventListener('resize', fit);
+  window.addEventListener('beforeprint', function () { stage.style.transform = 'none'; });
+  window.addEventListener('afterprint', fit);
+  var start = parseInt((location.hash || '').slice(1), 10);
+  show(isNaN(start) ? 0 : start - 1);
+  fit();
+})();
+</script>
+</body>
+</html>

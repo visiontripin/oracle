@@ -1,4 +1,4 @@
-BotControl — СБОРКА APK, ПРОВЕРКА, РЕЛИЗ И ССЫЛКИ (рабочий рецепт, проверен на v1.6.3–v1.6.5)
+BotControl — СБОРКА APK, ПРОВЕРКА, РЕЛИЗ И ССЫЛКИ (рабочий рецепт, проверен на v1.6.3–v1.7.0)
 ============================================================================================
 
 ПОЧЕМУ В CI: в песочнице агента закрыты dl.google.com, maven.google.com, Maven
@@ -22,8 +22,8 @@ Central и services.gradle.org, поэтому Android SDK и Gradle-завис�
 ШАГ 1. Версия (СНАЧАЛА)
 ------------------------------------------------------------------
   tg-bot-control/android/app/build.gradle.kts:
-      versionCode = 33          # текущий 32 → следующий 33
-      versionName = "1.6.6"
+      versionCode = 34          # текущий 33 → следующий 34
+      versionName = "1.7.1"          # текущий 1.7.0 → следующий 1.7.1
 
 ------------------------------------------------------------------
 ШАГ 2. Локальные проверки перед пушем (Android-компилятора нет!)
@@ -48,7 +48,7 @@ Central и services.gradle.org, поэтому Android SDK и Gradle-завис�
 ------------------------------------------------------------------
 ШАГ 3. Коммит с [apk] и пуш
 ------------------------------------------------------------------
-  git add -A && git commit -m "v1.6.6 (code 33) [apk]: что сделано"
+  git add -A && git commit -m "v1.7.1 (code 34) [apk]: что сделано"
   git push origin <твоя-ветка>
   git ls-remote origin <твоя-ветка>        # убедиться, что пуш дошёл
 
@@ -62,18 +62,18 @@ Central и services.gradle.org, поэтому Android SDK и Gradle-завис�
   # аннотации (строка aapt, тег релиза, ошибки сборки «e: …»):
   JOB=$(gh run view $RID --json jobs -q '.jobs[0].databaseId')
   gh api repos/visiontripin/oracle/check-runs/$JOB/annotations -q '.[] | .title+": "+.message'
-  Ожидаемо: «aapt: package: name='com.botcontrol.admin.debug' versionCode='33' versionName='1.6.6'
-  … | sha256=… | cert-sha256=2ecc9b73…e51e20d5e» и «release: botcontrol-v1.6.6-code33».
+  Ожидаемо: «aapt: package: name='com.botcontrol.admin.debug' versionCode='34' versionName='1.7.1'
+  … | sha256=… | cert-sha256=2ecc9b73…e51e20d5e» и «release: botcontrol-v1.7.1-code34».
   Если сборка упала: ошибки Kotlin есть в той же аннотации (шаг «Build errors → annotation»).
 
 ------------------------------------------------------------------
 ШАГ 5. Забрать APK и проверить (release-assets из песочницы НЕ скачиваются)
 ------------------------------------------------------------------
   # gh release download / gh run download / curl ассетов падают. Работает только git:
-  git fetch origin refs/tags/botcontrol-v1.6.6-code33
+  git fetch origin refs/tags/botcontrol-v1.7.1-code34
   git show FETCH_HEAD:tg-bot-control/BotControl-debug.apk > /tmp/app.apk
   sha256sum /tmp/app.apk                    # = sha256 из аннотации aapt
-  gh release view botcontrol-v1.6.6-code33 --json assets -q '.assets[].name'
+  gh release view botcontrol-v1.7.1-code34 --json assets -q '.assets[].name'
 
   # Сертификат подписи (APK Signature Scheme v2) — должен совпасть с эталоном:
 python3 - <<'EOF'
@@ -105,16 +105,17 @@ EOF
   • README.md (корень): «Текущая доставка» и следующий versionCode.
   • Коммит «docs: vX доставлен» (без [apk]) и пуш.
   • Сводка пользователю на русском, с прямыми ссылками:
-      https://github.com/visiontripin/oracle/releases/download/botcontrol-v1.6.6-code33/BotControl-debug.apk
-      https://github.com/visiontripin/oracle/releases/download/botcontrol-v1.6.6-code33/presentation-bot-ready.py
+      https://github.com/visiontripin/oracle/releases/download/botcontrol-v1.7.1-code34/BotControl-debug.apk
+      https://github.com/visiontripin/oracle/releases/download/botcontrol-v1.7.1-code34/presentation-bot-ready.py
       (и другие нужные *-ready.py, avatar-640.png, *.txt)
 
 ------------------------------------------------------------------
 PR И GITHUB
 ------------------------------------------------------------------
-  • PR #1: https://github.com/visiontripin/oracle/pull/1 (ветка arena/01a0d2d9-oracle → main).
-  • `gh pr edit` падает (ошибка GraphQL «Projects (classic) deprecated»). Правь через REST:
-      gh api -X PATCH repos/visiontripin/oracle/pulls/1 -f title="…" -F body=@/tmp/body.md
+  • GitHub Pages отдаёт docs/presentation.html и docs/presentation.pdf —
+    прямые ссылки для пользователя:
+      https://visiontripin.github.io/oracle/presentation.html
+      https://visiontripin.github.io/oracle/presentation.pdf
   • GitHub Pages через API недоступен (403). Pages включает пользователь:
     Settings → Pages → main, папка /docs.
   • raw.githubusercontent.com из песочницы недоступен. Файлы из репозитория читай так:

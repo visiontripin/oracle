@@ -10,21 +10,21 @@ Telegram-ботов: long polling Bot API, несколько ботов на р
 
 ИСТОЧНИК ИСТИНЫ — GIT. Весь проект лежит в репозитории:
   Репозиторий:        https://github.com/visiontripin/oracle
-  Рабочая ветка:      https://github.com/visiontripin/oracle/tree/arena/01a0d2d9-oracle
+  Рабочая ветка:      https://github.com/visiontripin/oracle/tree/main
   PR в main:          https://github.com/visiontripin/oracle/pull/1  (если уже влит — бери main)
   Релизы (APK):       https://github.com/visiontripin/oracle/releases
-  Последний релиз:    https://github.com/visiontripin/oracle/releases/tag/botcontrol-v1.6.5-code32
+  Последний релиз:    https://github.com/visiontripin/oracle/releases/tag/botcontrol-v1.7.0-code33
   CI (Actions):       https://github.com/visiontripin/oracle/actions
-  Память проекта:     https://github.com/visiontripin/oracle/blob/arena/01a0d2d9-oracle/tg-bot-control/ПЕРЕДАЧА-КОНТЕКСТА.md
-  Инструкции (txt):   https://github.com/visiontripin/oracle/tree/arena/01a0d2d9-oracle/handoff
+  Память проекта:     https://github.com/visiontripin/oracle/blob/main/tg-bot-control/ПЕРЕДАЧА-КОНТЕКСТА.md
+  Инструкции (txt):   https://github.com/visiontripin/oracle/tree/main/handoff
 
 ПЕРВЫЕ ДЕЙСТВИЯ (по порядку):
 1. Подтяни проект в свою ветку сессии (у нового чата будет своя ветка arena/…):
-     git fetch origin arena/01a0d2d9-oracle main
-     git merge --ff-only FETCH_HEAD   # или: git reset --hard origin/arena/01a0d2d9-oracle,
+     git fetch origin main main
+     git merge --ff-only FETCH_HEAD   # или: git reset --hard origin/main,
                                       # если в твоей ветке только «Initial commit»
    Если PR #1 уже влит, достаточно origin/main.
-   Проверь: git log --oneline -3 (последние коммиты — «docs: v1.6.5 доставлен» или новее).
+   Проверь: git log --oneline -3 (последние коммиты — «docs: v1.7.0 доставлен» или новее).
    Удобная ссылка: ln -sfn "$PWD/tg-bot-control" /home/user/tg-bot-control
 2. Прочитай ЦЕЛИКОМ:
      handoff/01-project-rules.txt     — мои строгие требования (соблюдать всегда)
@@ -37,14 +37,13 @@ Telegram-ботов: long polling Bot API, несколько ботов на р
    стоит branches: ["arena/**", "main"]. Сборка APK запускается пушем в ветку,
    тег и релиз создаются, когда в сообщении коммита есть [apk].
 
-ТЕКУЩЕЕ СОСТОЯНИЕ: v1.6.5 (versionCode 32), тег botcontrol-v1.6.5-code32.
-  APK:  https://github.com/visiontripin/oracle/releases/download/botcontrol-v1.6.5-code32/BotControl-debug.apk
-  sha256 01a9286a7606c4cb1ad0880c9e0d4d1757b0e1b92035f8e1c46312e5892903ac
+ТЕКУЩЕЕ СОСТОЯНИЕ: v1.7.0 (versionCode 33), тег botcontrol-v1.7.0-code33.
+  APK:  https://github.com/visiontripin/oracle/releases/download/botcontrol-v1.7.0-code33/BotControl-debug.apk
   Сертификат подписи (не должен меняться):
   2ecc9b73dd43d0b40cd032c3e83d2e7f4a549680d513a10b7ed5510e51e20d5e
-  СЛЕДУЮЩАЯ СБОРКА: versionCode 33, versionName 1.6.6 (или 1.7.0 для крупной фичи).
+  СЛЕДУЮЩАЯ СБОРКА: versionCode 34 (versionName 1.7.1 или 1.8.0 для крупной фичи).
 
-ПОСЛЕДНЕЕ, ЧТО ДЕЛАЛИ (v1.6.3–v1.6.5): изоляция ботов. Уточняющие вопросы,
+ПОСЛЕДНЕЕ, ЧТО ДЕЛАЛИ (v1.6.3–v1.7.0): изоляция ботов. Уточняющие вопросы,
 запасной ответ и кулдаун одного бота звучали во всех, потому что в
 LocalBotStore botId = -1 означает «активный в UI бот». Теперь в service/ и
 data/ botId передаётся явно, это проверяет CI-скрипт
@@ -57,12 +56,13 @@ tg-bot-control/tools/check-bot-isolation.py. Ещё добавлены: влад
 
 ЖДУТ ОТ МЕНЯ (напомни, если ещё не сделано):
   • отозвать токен бота 8709443116 в @BotFather (/revoke): он остался в истории git;
-  • влить PR #1 в main;
   • включить GitHub Pages: Settings → Pages → main, папка /docs.
 
 ПРАВИЛА ДОСТАВКИ:
   • каждая задача заканчивается готовым APK со следующим versionCode, проверкой
     aapt и сертификата и понятной сводкой НА РУССКОМ;
+  • презентация проекта — docs/presentation.html (+ PDF): держать в актуальном
+    состоянии при изменении возможностей;
   • все файлы, которые мне нужно скачать (APK, *.py, txt), даются ПРЯМЫМИ ССЫЛКАМИ:
     https://github.com/visiontripin/oracle/releases/download/<тег>/<файл>
   • никогда не коммить живые токены ботов (в git можно только debug.keystore).
@@ -72,6 +72,6 @@ tg-bot-control/tools/check-bot-isolation.py. Ещё добавлены: влад
 
 ------------------------------------------------------------------------------------------
 КОРОТКИЙ ВАРИАНТ (если контекст уже передан):
-Проект BotControl, git: https://github.com/visiontripin/oracle (ветка arena/01a0d2d9-oracle
+Проект BotControl, git: https://github.com/visiontripin/oracle (ветка main
 или main). Подтяни его, прочитай handoff/*.txt и tg-bot-control/ПЕРЕДАЧА-КОНТЕКСТА.md,
-продолжаем с v1.6.5 (следующий versionCode 33). Задача: [ОПИШИ ЗАДАЧУ]
+продолжаем с v1.7.0 (следующий versionCode 34). Задача: [ОПИШИ ЗАДАЧУ]

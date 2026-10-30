@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -46,7 +45,6 @@ import kotlinx.coroutines.launch
 fun WelcomeScreen(
     localStore: LocalBotStore,
     onAddBot: () -> Unit,
-    onServer: () -> Unit,
     onOpenBot: (Long) -> Unit,
     onFaq: () -> Unit,
 ) {
@@ -55,7 +53,6 @@ fun WelcomeScreen(
     val states by LocalBotService.states.collectAsState()
 
     var profiles by remember { mutableStateOf<List<BotProfile>>(emptyList()) }
-    var showReplaceWarn by remember { mutableStateOf(false) }
     var lastCrash by remember { mutableStateOf("") }
 
     LaunchedEffect(Unit) {
@@ -76,7 +73,7 @@ fun WelcomeScreen(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            Button(onClick = { showReplaceWarn = true }) { Text("+") }
+            Button(onClick = onAddBot) { Text("+") }
         }
         Spacer(Modifier.height(16.dp))
 
@@ -144,17 +141,13 @@ fun WelcomeScreen(
         }
 
         // ---------- добавить ----------
-        Button(onClick = { showReplaceWarn = true }, modifier = Modifier.fillMaxWidth()) {
+        Button(onClick = onAddBot, modifier = Modifier.fillMaxWidth()) {
             Text("+ Добавить бота")
         }
         Text("Можно добавить несколько ботов — каждый на своём токене, работают одновременно. Правила, расписание и характер у каждого свои.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Spacer(Modifier.height(12.dp))
-        OutlinedButton(onClick = onServer, modifier = Modifier.fillMaxWidth()) {
-            Text("+ Добавить сервер")
-        }
-        Text("Необязательно. Сервер нужен, только если у тебя уже есть свой бот на ПК/VPS с нашей серверной частью — тогда приложение станет пультом к нему. Ботам на телефоне сервер не требуется.",
+        Text("Один телефон — сколько угодно ботов. Сервер и VPS не нужны.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant)
 
@@ -182,7 +175,7 @@ fun WelcomeScreen(
         }
 
         Spacer(Modifier.height(16.dp))
-        OutlinedButton(onClick = { showReplaceWarn = true }, modifier = Modifier.fillMaxWidth()) {
+        OutlinedButton(onClick = onAddBot, modifier = Modifier.fillMaxWidth()) {
             Text("+ Добавить ещё одного бота")
         }
         Spacer(Modifier.height(8.dp))
@@ -192,21 +185,5 @@ fun WelcomeScreen(
         Spacer(Modifier.height(12.dp))
         ProjectLinksCard()
         Spacer(Modifier.height(24.dp))
-    }
-
-    if (showReplaceWarn) {
-        AlertDialog(
-            onDismissRequest = { showReplaceWarn = false },
-            title = { Text("Что добавить?") },
-            text = {
-                Text("Бот — работает на этом телефоне по своему токену (можно несколько). Сервер — подключение к своему ПК/VPS с серверной частью BotControl, нужен логин и пароль.")
-            },
-            confirmButton = {
-                TextButton(onClick = { showReplaceWarn = false; onAddBot() }) { Text("🤖 Бота") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showReplaceWarn = false; onServer() }) { Text("🖥 Сервер") }
-            },
-        )
     }
 }

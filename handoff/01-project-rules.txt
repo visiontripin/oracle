@@ -1,7 +1,7 @@
 BotControl — ТРЕБОВАНИЯ ПОЛЬЗОВАТЕЛЯ (соблюдать СТРОГО, в каждой итерации)
 ==========================================================================
 Источник: tg-bot-control/ПЕРЕДАЧА-КОНТЕКСТА.md, раздел 7, и прямые указания пользователя в чатах.
-Ссылка: https://github.com/visiontripin/oracle/blob/arena/01a0d2d9-oracle/tg-bot-control/ПЕРЕДАЧА-КОНТЕКСТА.md
+Ссылка: https://github.com/visiontripin/oracle/blob/main/tg-bot-control/ПЕРЕДАЧА-КОНТЕКСТА.md
 
 1. ДИЗАЙН
    • Строгая палитра Telegram:

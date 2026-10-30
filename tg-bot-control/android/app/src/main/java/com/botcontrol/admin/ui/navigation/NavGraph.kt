@@ -106,17 +106,11 @@ fun NavGraph(
     var isLocalMode by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
-        val mode = localStore.mode()
-        isLocalMode = mode != "server"
-        startRoute = when {
-            mode == "server" && !authStore.token().isNullOrBlank() &&
-                authStore.baseUrl().isNotBlank() -> {
-                repository.attach(authStore, authStore.baseUrl())
-                Routes.DASHBOARD
-            }
-            mode == "server" -> Routes.LOGIN
-            else -> Routes.WELCOME // главный экран: боты со статусом, «+», FAQ
-        }
+        // Серверный режим заморожен (v1.7.0): приложение работает с ботами,
+        // которые живут на телефоне. Экраны сервера остались в коде как архив,
+        // точки входа в них больше нет.
+        isLocalMode = true
+        startRoute = Routes.WELCOME // главный экран: боты со статусом, «+», FAQ
     }
 
     val start = startRoute ?: return LoadingBox()
@@ -128,7 +122,6 @@ fun NavGraph(
             WelcomeScreen(
                 localStore = localStore,
                 onAddBot = { nav.navigate(Routes.LOCAL_SETUP) },
-                onServer = { nav.navigate(Routes.LOGIN) },
                 onOpenBot = { id -> nav.navigate(Routes.tree(id)) },
                 onFaq = { nav.navigate(Routes.FAQ) },
             )
