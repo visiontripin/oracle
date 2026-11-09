@@ -3,11 +3,12 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 import argparse
 import json
+import sys
 import threading
 import urllib.request
 import webbrowser
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
 
 
 class Runtime:
@@ -115,6 +116,8 @@ class Handler(SimpleHTTPRequestHandler):
     def do_GET(self):
         if not self.valid_host(): return self.send_error(403)
         if self.path == '/api/status': return self.send_json(200, runtime.status())
+        if self.path not in ('/', '/index.html', '/style.css', '/app.js'):
+            return self.send_error(404)
         return super().do_GET()
 
     def do_POST(self):

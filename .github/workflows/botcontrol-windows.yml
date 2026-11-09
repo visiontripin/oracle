@@ -1,0 +1,63 @@
+name: BotControl Windows
+
+on:
+  push:
+    branches: ["arena/**", "main"]
+    paths:
+      - "tg-bot-control/desktop-web/**"
+      - ".github/workflows/botcontrol-windows.yml"
+  pull_request:
+    paths:
+      - "tg-bot-control/desktop-web/**"
+      - ".github/workflows/botcontrol-windows.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Test runtime
+        working-directory: tg-bot-control/desktop-web
+        run: python -m unittest -v
+      - name: Build executable
+        working-directory: tg-bot-control/desktop-web
+        shell: pwsh
+        run: |
+          python -m pip install pyinstaller==6.11.1
+          python -m PyInstaller --noconfirm --clean --onefile --name BotControl --add-data "index.html;." --add-data "style.css;." --add-data "app.js;." server.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Smoke test executable
+        working-directory: tg-bot-control/desktop-web
+        shell: pwsh
+        run: |
+          $process = Start-Process -FilePath (Resolve-Path dist/BotControl.exe) -ArgumentList '--no-browser', '--port', '18765' -PassThru
+          try {
+            $ready = $false
+            for ($i = 0; $i -lt 30; $i++) {
+              Start-Sleep -Seconds 1
+              if ($process.HasExited) { throw 'BotControl.exe exited unexpectedly' }
+              try {
+                $page = Invoke-WebRequest -Uri 'http://127.0.0.1:18765/' -UseBasicParsing -TimeoutSec 2
+                $js = Invoke-WebRequest -Uri 'http://127.0.0.1:18765/app.js' -UseBasicParsing -TimeoutSec 2
+                $status = Invoke-RestMethod -Uri 'http://127.0.0.1:18765/api/status' -TimeoutSec 2
+                if ($page.Content -match 'BotControl' -and $js.Content -match 'runtimeStatus' -and $status.state -eq 'stopped') { $ready = $true; break }
+              } catch { }
+            }
+            if (-not $ready) { throw 'BotControl.exe did not serve its assets and status' }
+          } finally {
+            if (-not $process.HasExited) { Stop-Process -Id $process.Id -Force }
+          }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BotControl-Windows
+          path: tg-bot-control/desktop-web/dist/BotControl.exe
+          if-no-files-found: error
+          retention-days: 30
