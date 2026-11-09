@@ -101,12 +101,6 @@ jobs:
           VC=$(grep -oP 'versionCode\s*=\s*\K\d+' "$GRADLE")
           VN=$(grep -oP 'versionName\s*=\s*"\K[^"]+' "$GRADLE")
           TAG="botcontrol-v${VN}-code${VC}"
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -f tg-bot-control/BotControl-debug.apk
-          git commit -q -m "BotControl v${VN} (code ${VC}) — APK из ${GITHUB_SHA::7}"
-          git tag -f "$TAG"
-          git push -f origin "refs/tags/${TAG}"
           NOTES=/tmp/notes.md
           {
             echo "Debug APK, собран из \`${GITHUB_SHA::7}\` (ветка ${GITHUB_REF_NAME})."
@@ -135,6 +129,6 @@ jobs:
             gh release edit "$TAG" --notes-file "$NOTES" --prerelease
           else
             gh release create "$TAG" $ASSETS \
-              --prerelease --title "BotControl v${VN} (code ${VC})" --notes-file "$NOTES"
+              --target "$GITHUB_SHA" --prerelease --title "BotControl v${VN} (code ${VC})" --notes-file "$NOTES"
           fi
           echo "::notice title=release::${TAG}"
