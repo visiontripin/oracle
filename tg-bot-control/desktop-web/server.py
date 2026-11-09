@@ -3,6 +3,7 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 import argparse
 import json
+import ipaddress
 import sys
 import threading
 import urllib.request
@@ -102,7 +103,7 @@ class Handler(SimpleHTTPRequestHandler):
         super().__init__(*args, directory=str(ROOT), **kwargs)
 
     def valid_host(self):
-        return self.headers.get('Host') == f'127.0.0.1:{self.server.server_port}'
+        return self.headers.get('Host') == f'{self.server.server_address[0]}:{self.server.server_port}'
 
     def send_json(self, code, data):
         raw = json.dumps(data, ensure_ascii=False).encode()
@@ -121,7 +122,7 @@ class Handler(SimpleHTTPRequestHandler):
         return super().do_GET()
 
     def do_POST(self):
-        origin = f'http://127.0.0.1:{self.server.server_port}'
+        origin = f'http://{self.server.server_address[0]}:{self.server.server_port}'
         if not self.valid_host() or self.headers.get('Origin') != origin or self.headers.get('Content-Type') != 'application/json':
             return self.send_error(403)
         try:
@@ -140,10 +141,23 @@ class Handler(SimpleHTTPRequestHandler):
 def main():
     parser = argparse.ArgumentParser(description='Local BotControl')
     parser.add_argument('--port', type=int, default=8765)
+    parser.add_argument('--host', default='127.0.0.1', help='Local IPv4 address; use a private Wi-Fi address for LAN access')
     parser.add_argument('--no-browser', action='store_true')
     args = parser.parse_args()
-    server = ThreadingHTTPServer(('127.0.0.1', args.port), Handler)
-    url = f'http://127.0.0.1:{server.server_port}/'
+    try:
+        address = ipaddress.IPv4Address(args.host)
+    except ipaddress.AddressValueError:
+        parser.error('--host must be an IPv4 address')
+    allowed = [ipaddress.IPv4Network(net) for net in ('10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16')]
+    if address != ipaddress.IPv4Address('127.0.0.1') and not any(address in net for net in allowed):
+        parser.error('--host must be 127.0.0.1 or a private Wi-Fi IPv4 address')
+    try:
+        server = ThreadingHTTPServer((str(address), args.port), Handler)
+    except OSError as exc:
+        parser.exit(1, f'Cannot start server: {exc}\n')
+    url = f'http://{address}:{server.server_port}/'
+    if address != ipaddress.IPv4Address('127.0.0.1'):
+        print('WARNING: LAN mode has no authentication or encryption. Use only a trusted network.', flush=True)
     print(f'BotControl: {url} (Ctrl+C для остановки)', flush=True)
     if not args.no_browser: webbrowser.open(url)
     try: server.serve_forever()

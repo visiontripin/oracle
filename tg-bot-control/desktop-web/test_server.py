@@ -1,7 +1,11 @@
 import threading
+import http.client
+import subprocess
+import sys
+from http.server import ThreadingHTTPServer
 import time
 import unittest
-from server import Runtime
+from server import Runtime, Handler
 
 
 class RuntimeTests(unittest.TestCase):
@@ -37,5 +41,44 @@ class RuntimeTests(unittest.TestCase):
         r.thread.join(2)
         self.assertEqual(r.status()['state'], 'stopped')
         self.assertNotIn('secret', r.status()['error'])
+
+
+class HttpTests(unittest.TestCase):
+    def setUp(self):
+        self.server = ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+        self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
+        self.thread.start()
+        self.port = self.server.server_port
+
+    def tearDown(self):
+        self.server.shutdown()
+        self.server.server_close()
+        self.thread.join()
+
+    def request(self, method, path, headers=None, body=None):
+        connection = http.client.HTTPConnection('127.0.0.1', self.port, timeout=3)
+        connection.request(method, path, body, headers or {})
+        response = connection.getresponse()
+        result = (response.status, response.read())
+        connection.close()
+        return result
+
+    def test_assets_and_status(self):
+        self.assertEqual(self.request('GET', '/')[0], 200)
+        self.assertEqual(self.request('GET', '/app.js')[0], 200)
+        self.assertEqual(self.request('GET', '/api/status')[0], 200)
+        self.assertEqual(self.request('GET', '/server.py')[0], 404)
+
+    def test_rejects_cross_origin_and_bad_host(self):
+        headers = {'Content-Type': 'application/json', 'Origin': 'http://evil.example'}
+        self.assertEqual(self.request('POST', '/api/stop', headers, '{}')[0], 403)
+        self.assertEqual(self.request('GET', '/', {'Host': 'evil.example'})[0], 403)
+        headers['Origin'] = f'http://127.0.0.1:{self.port}'
+        self.assertEqual(self.request('POST', '/api/stop', headers, '{}')[0], 200)
+
+    def test_public_bind_rejected(self):
+        result = subprocess.run([sys.executable, 'server.py', '--host', '0.0.0.0', '--no-browser'], capture_output=True, text=True, timeout=5)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('private Wi-Fi', result.stderr)
 
 if __name__ == '__main__': unittest.main()

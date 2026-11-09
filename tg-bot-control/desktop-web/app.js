@@ -2,7 +2,7 @@
 const KEY = 'botcontrol-editor-v1';
 const $ = id => document.getElementById(id);
 const fresh = () => ({format:'botcontrol',version:1,name:'Мой бот',scenarios:[],buttons:[]});
-const id = () => crypto.randomUUID();
+const id = () => { const bytes = new Uint8Array(16); crypto.getRandomValues(bytes); return Array.from(bytes, b => b.toString(16).padStart(2, '0')).join(''); };
 function validate(x) {
   if (!x || x.format !== 'botcontrol' || x.version !== 1 || typeof x.name !== 'string' || !Array.isArray(x.scenarios) || !Array.isArray(x.buttons)) throw Error('Неподдерживаемый или повреждённый файл .bc.');
   const ids = new Set();
