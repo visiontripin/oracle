@@ -45,6 +45,45 @@ class RuntimeTests(unittest.TestCase):
 
 
 
+class TriggerTests(unittest.TestCase):
+    def test_commands_phrases_buttons_and_start(self):
+        sent, completed = [], threading.Event()
+        messages = ['/start', '/HELP@mybot extra', 'Привет МИР', 'нажми']
+        def request(token, method, payload):
+            if method == 'getMe': return {'id': 1}
+            if method == 'getUpdates':
+                if not sent:
+                    return [{'update_id': i + 1, 'message': {'chat': {'id': 123}, 'text': text}} for i, text in enumerate(messages)]
+                completed.set(); time.sleep(.01); return []
+            if method == 'sendMessage': sent.append(payload); return {}
+        bot = {'scenarios': [
+            {'id':'start', 'text':'Добро пожаловать', 'trigger':{'type':'command','value':'/start'}},
+            {'id':'help', 'text':'Помощь', 'trigger':{'type':'command','value':'/help'}},
+            {'id':'phrase', 'text':'На фразу', 'trigger':{'type':'contains','value':'мир'}},
+            {'id':'button', 'text':'На кнопку'}],
+            'buttons':[{'label':'Нажми','scenarioId':'button'}]}
+        runtime = Runtime(request)
+        runtime.start('123:ABC', bot)
+        self.assertTrue(completed.wait(2))
+        runtime.stop(); runtime.thread.join(2)
+        self.assertEqual([p['text'] for p in sent], ['Добро пожаловать','Помощь','На фразу','На кнопку'])
+        self.assertEqual(sent[0]['reply_markup']['keyboard'][0][0]['text'], 'Нажми')
+
+    def test_invalid_and_duplicate_command(self):
+        runtime = Runtime()
+        for trigger in [{'type':'command','value':'help'}, {'type':'command','value':'/привет'}, {'type':'contains','value':''}]:
+            with self.assertRaises(ValueError):
+                runtime.start('123:ABC', {'scenarios':[{'id':'1','text':'OK','trigger':trigger}], 'buttons':[]})
+        bot = {'scenarios':[{'id':'1','text':'a','trigger':{'type':'command','value':'/go'}}, {'id':'2','text':'b','trigger':{'type':'command','value':'/GO'}}], 'buttons':[]}
+        with self.assertRaises(ValueError): runtime.start('123:ABC', bot)
+
+    def test_command_without_keyboard(self):
+        runtime = Runtime(lambda *args: (_ for _ in ()).throw(RuntimeError()))
+        runtime.start('123:ABC', {'scenarios':[{'id':'1','text':'OK','trigger':{'type':'command','value':'/go'}}], 'buttons':[]})
+        runtime.thread.join(2)
+        self.assertEqual(runtime.status()['state'], 'stopped')
+
+
 class AnimationTests(unittest.TestCase):
     def spec(self, preset):
         return {'preset': preset, 'text': 'Тест {user}', 'interval': 500, 'loops': 1, 'count': 3, 'final': 'Готово', 'frames': 'Один\n---\nДва'}

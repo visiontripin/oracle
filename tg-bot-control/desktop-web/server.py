@@ -3,6 +3,7 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 import argparse
 import json
+import re
 import ipaddress
 import sys
 import threading
@@ -43,6 +44,8 @@ class Runtime:
         if not isinstance(bot, dict) or not isinstance(bot.get('buttons'), list) or not isinstance(bot.get('scenarios'), list):
             raise ValueError('Некорректные данные бота.')
         scenarios = {}
+        triggers = []
+        seen_commands = set()
         for s in bot['scenarios']:
             if not isinstance(s, dict) or not isinstance(s.get('id'), str):
                 raise ValueError('Некорректный сценарий.')
@@ -53,10 +56,28 @@ class Runtime:
                 text = s.get('text')
                 if not isinstance(text, str): raise ValueError('Некорректный ответ.')
                 scenarios[s['id']] = {'text': text}
+            trigger = s.get('trigger')
+            if trigger is not None:
+                if not isinstance(trigger, dict) or trigger.get('type') not in ('command', 'contains') or not isinstance(trigger.get('value'), str):
+                    raise ValueError('Некорректное условие сценария.')
+                kind, value = trigger['type'], trigger['value'].strip()
+                if not value or len(value) > 200:
+                    raise ValueError('Укажите команду или фразу длиной до 200 символов.')
+                if kind == 'command':
+                    if not re.fullmatch(r'/[a-zA-Z0-9_]{1,32}', value):
+                        raise ValueError('Команда должна начинаться с / и содержать до 32 латинских букв, цифр или _.')
+                    if value.lower() in seen_commands: raise ValueError('Команды не должны повторяться.')
+                    seen_commands.add(value.lower())
+                action = scenarios[s['id']]
+                if 'text' in action and (not action['text'].strip() or len(action['text']) > 4096):
+                    raise ValueError('Заполните ответ для сценария с условием (до 4096 символов).')
+                triggers.append((kind, value.casefold(), action))
         buttons = [(b.get('label'), scenarios.get(b.get('scenarioId'))) for b in bot['buttons'] if isinstance(b, dict)]
-        if not buttons or any(not isinstance(label, str) or not label.strip() or len(label) > 100 or not isinstance(action, dict) or ('text' in action and (not action['text'].strip() or len(action['text']) > 4096)) for label, action in buttons):
+        if any(not isinstance(label, str) or not label.strip() or len(label) > 100 or not isinstance(action, dict) or ('text' in action and (not action['text'].strip() or len(action['text']) > 4096)) for label, action in buttons):
             raise ValueError('Добавьте кнопки с непустыми названиями и сценариями (ответ до 4096 символов).')
-        if len({label for label, _ in buttons}) != len(buttons):
+        if not buttons and not triggers:
+            raise ValueError('Добавьте кнопку или сценарий с командой или фразой.')
+        if len({label.casefold() for label, _ in buttons}) != len(buttons):
             raise ValueError('Названия кнопок должны быть уникальными.')
         if len(buttons) > 100:
             raise ValueError('Допускается не более 100 кнопок.')
@@ -65,7 +86,7 @@ class Runtime:
                 raise ValueError('Бот уже запущен или останавливается.')
             self.stop_event = threading.Event()
             self.state, self.error = 'starting', ''
-            self.thread = threading.Thread(target=self.run, args=(token, buttons, self.stop_event), daemon=True)
+            self.thread = threading.Thread(target=self.run, args=(token, buttons, triggers, self.stop_event), daemon=True)
             self.thread.start()
 
     def stop(self):
@@ -74,14 +95,14 @@ class Runtime:
                 self.stop_event.set()
                 self.state = 'stopping'
 
-    def run(self, token, buttons, stop):
+    def run(self, token, buttons, triggers, stop):
         try:
             self.request(token, 'getMe', {})
             with self.lock:
                 if not stop.is_set(): self.state = 'running'
             offset = None
             keyboard = {'keyboard': [[{'text': label}] for label, _ in buttons], 'resize_keyboard': True}
-            replies = dict(buttons)
+            replies = {label.casefold(): action for label, action in buttons}
             while not stop.is_set():
                 try:
                     payload = {'timeout': 20, 'allowed_updates': ['message']}
@@ -93,18 +114,26 @@ class Runtime:
                         chat = message.get('chat', {})
                         text = message.get('text', '')
                         if not chat.get('id') or not isinstance(text, str): continue
-                        if text.split(' ', 1)[0].split('@')[0] == '/start':
+                        first = text.split()[0].split('@')[0].casefold() if text.split() else ''
+                        is_start = first == '/start'
+                        command = next((action for kind, value, action in triggers if kind == 'command' and value == first), None)
+                        action = command or replies.get(text.casefold())
+                        if action is None:
+                            action = next((action for kind, value, action in triggers if kind == 'contains' and value in text.casefold()), None)
+                        if is_start and action is None and buttons:
                             self.request(token, 'sendMessage', {'chat_id': chat['id'], 'text': 'Выберите кнопку:', 'reply_markup': keyboard})
-                        elif text in replies:
-                            action = replies[text]
+                        elif action:
+                            markup = keyboard if is_start and buttons else None
                             if 'animation' in action:
                                 if self.animation_slots.acquire(blocking=False):
                                     user = message.get('from', {}).get('first_name', '')
-                                    threading.Thread(target=self.animate, args=(token, chat['id'], action['animation'], user, stop), daemon=True).start()
+                                    threading.Thread(target=self.animate, args=(token, chat['id'], action['animation'], user, stop, markup), daemon=True).start()
                                 else:
                                     self.request(token, 'sendMessage', {'chat_id': chat['id'], 'text': 'Слишком много анимаций, попробуйте позже.'})
                             else:
-                                self.request(token, 'sendMessage', {'chat_id': chat['id'], 'text': action['text']})
+                                body = {'chat_id': chat['id'], 'text': action['text']}
+                                if markup: body['reply_markup'] = markup
+                                self.request(token, 'sendMessage', body)
                     with self.lock: self.error = ''
                 except Exception:
                     with self.lock: self.error = 'Ошибка связи с Telegram. Повторная попытка через 5 секунд. Проверьте сеть и убедитесь, что бот не запущен в другом месте.'
@@ -115,14 +144,16 @@ class Runtime:
             with self.lock: self.state = 'stopped'
 
 
-    def animate(self, token, chat_id, spec, user, stop):
+    def animate(self, token, chat_id, spec, user, stop, markup=None):
         try:
             sequence = frames(spec, user if isinstance(user, str) else '')
             final = spec.get('final', '').replace('{user}', user if isinstance(user, str) else '')
             if not final and spec['preset'] == 'countdown': final = '🚀'
             if final.strip() and final != sequence[-1]: sequence.append(final[:3500])
             if stop.is_set(): return
-            sent = self.request(token, 'sendMessage', {'chat_id': chat_id, 'text': sequence[0]})
+            body = {'chat_id': chat_id, 'text': sequence[0]}
+            if markup: body['reply_markup'] = markup
+            sent = self.request(token, 'sendMessage', body)
             for frame in sequence[1:]:
                 if stop.wait(spec.get('interval', 700) / 1000): break
                 self.request(token, 'editMessageText', {'chat_id': chat_id, 'message_id': sent['message_id'], 'text': frame})
