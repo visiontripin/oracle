@@ -1,11 +1,15 @@
 import threading
+import json
+from unittest.mock import patch
+from datetime import datetime
 import http.client
 import subprocess
 import sys
 from http.server import ThreadingHTTPServer
 import time
 import unittest
-from server import Runtime, Handler
+from server import Runtime, Handler, compile_bot, action_text
+from android_import import extract_lists
 from animations import PRESETS, frames, validate_animation
 
 
@@ -84,6 +88,43 @@ class TriggerTests(unittest.TestCase):
         self.assertEqual(runtime.status()['state'], 'stopped')
 
 
+class NewFeaturesTests(unittest.TestCase):
+    def test_pack_and_inline(self):
+        bot = {'scenarios': [{'id':'1','text':'','replies':['один','два'], 'links':[{'label':'Сайт','url':'https://example.com'}], 'trigger':{'type':'command','value':'/go'}}], 'buttons':[]}
+        _, triggers, _ = compile_bot(bot)
+        action = triggers[0][2]
+        self.assertIn(action_text(action), ['один','два'])
+        self.assertEqual(action['inline']['inline_keyboard'][0][0]['url'], 'https://example.com')
+        bot['scenarios'][0]['links'][0]['url'] = 'javascript:alert(1)'
+        with self.assertRaises(ValueError): compile_bot(bot)
+        bot['scenarios'][0]['links'] = []
+        bot['scenarios'][0]['replies'] = []
+        with self.assertRaises(ValueError): compile_bot(bot)
+
+    def test_extract_python_only_literal_lists(self):
+        source = "import os\nos.system('this must never run')\nMY_REPLIES = ['один', 'два']\nBOT_TOKEN = 'secret'\n"
+        self.assertEqual(extract_lists(source), [{'name':'MY_REPLIES','items':['один','два']}])
+        with self.assertRaises(ValueError): extract_lists('def broken(')
+
+    def test_schedule_once_per_day(self):
+        bot = {'scenarios':[{'id':'1','text':'Привет'}], 'buttons':[], 'schedule':[{'id':'a','time':'09:00','chatId':'123', 'days':[0], 'scenarioId':'1'}]}
+        _, _, events = compile_bot(bot)
+        sent = []
+        runtime = Runtime(lambda token, method, payload: sent.append((method, payload)))
+        class Stop:
+            count = 0
+            def is_set(self): return self.count >= 2
+            def wait(self, timeout): self.count += 1; return False
+        with patch('server.datetime') as clock:
+            clock.now.return_value = datetime(2026, 11, 9, 9, 0)
+            runtime.schedule_loop('123:abc', events, Stop())
+        self.assertEqual(len(sent), 1)
+        self.assertEqual(sent[0][1]['chat_id'], 123)
+        self.assertEqual(sent[0][1]['text'], 'Привет')
+        bot['schedule'][0]['time'] = '25:00'
+        with self.assertRaises(ValueError): compile_bot(bot)
+
+
 class AnimationTests(unittest.TestCase):
     def spec(self, preset):
         return {'preset': preset, 'text': 'Тест {user}', 'interval': 500, 'loops': 1, 'count': 3, 'final': 'Готово', 'frames': 'Один\n---\nДва'}
@@ -160,6 +201,16 @@ class HttpTests(unittest.TestCase):
         self.assertEqual(self.request('GET', '/', {'Host': 'evil.example'})[0], 403)
         headers['Origin'] = f'http://127.0.0.1:{self.port}'
         self.assertEqual(self.request('POST', '/api/stop', headers, '{}')[0], 200)
+
+    def test_simulation_and_python_import(self):
+        headers = {'Content-Type': 'application/json', 'Origin': f'http://127.0.0.1:{self.port}'}
+        bot = {'scenarios':[{'id':'s', 'text':'OK', 'trigger':{'type':'command','value':'/go'}}], 'buttons':[]}
+        status, body = self.request('POST', '/api/simulate', headers, json.dumps({'text':'/GO','bot':bot}))
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(body)['result'], 'OK')
+        status, body = self.request('POST', '/api/import-python', headers, json.dumps({'source':"HELLO = ['A', 'B']"}))
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(body)['packs'][0]['items'], ['A','B'])
 
     def test_public_bind_rejected(self):
         result = subprocess.run([sys.executable, 'server.py', '--host', '0.0.0.0', '--no-browser'], capture_output=True, text=True, timeout=5)

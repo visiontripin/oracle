@@ -4,14 +4,110 @@ from pathlib import Path
 import argparse
 import json
 import re
+import random
+from collections import deque
+from datetime import datetime
 import ipaddress
 import sys
 import threading
 import urllib.request
+from urllib.parse import urlsplit
 import webbrowser
 from animations import frames, validate_animation
+from android_import import extract_lists
 
 ROOT = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
+
+
+def compile_bot(bot):
+    if not isinstance(bot, dict) or not isinstance(bot.get('buttons'), list) or not isinstance(bot.get('scenarios'), list):
+        raise ValueError('Некорректные данные бота.')
+    scenarios = {}
+    triggers = []
+    seen_commands = set()
+    for s in bot['scenarios']:
+        if not isinstance(s, dict) or not isinstance(s.get('id'), str):
+            raise ValueError('Некорректный сценарий.')
+        if s.get('animation') is not None:
+            validate_animation(s['animation'])
+            scenarios[s['id']] = {'animation': s['animation']}
+        elif s.get('replies') is not None:
+            replies = s['replies']
+            if not isinstance(replies, list) or not replies or len(replies) > 500 or any(not isinstance(x, str) or not x.strip() or len(x) > 4096 for x in replies):
+                raise ValueError('Набор должен содержать от 1 до 500 непустых ответов до 4096 символов.')
+            scenarios[s['id']] = {'replies': replies}
+        else:
+            text = s.get('text')
+            if not isinstance(text, str): raise ValueError('Некорректный ответ.')
+            scenarios[s['id']] = {'text': text}
+        links = s.get('links', [])
+        if not isinstance(links, list) or len(links) > 3:
+            raise ValueError('Можно добавить не более трёх ссылок под сообщением.')
+        inline = []
+        for link in links:
+            if not isinstance(link, dict) or not isinstance(link.get('label'), str) or not link['label'].strip() or len(link['label']) > 100 or not isinstance(link.get('url'), str) or len(link['url']) > 2048:
+                raise ValueError('Заполните название и URL кнопки-ссылки.')
+            try: parsed = urlsplit(link['url'])
+            except ValueError: raise ValueError('Неверный URL кнопки.') from None
+            if parsed.scheme not in ('http', 'https') or not parsed.hostname or parsed.username or parsed.password:
+                raise ValueError('Кнопка-ссылка должна содержать URL http или https без учётных данных.')
+            inline.append({'text': link['label'], 'url': link['url']})
+        if inline: scenarios[s['id']]['inline'] = {'inline_keyboard': [inline]}
+        trigger = s.get('trigger')
+        if trigger is not None:
+            if not isinstance(trigger, dict) or trigger.get('type') not in ('command', 'contains') or not isinstance(trigger.get('value'), str):
+                raise ValueError('Некорректное условие сценария.')
+            kind, value = trigger['type'], trigger['value'].strip()
+            if not value or len(value) > 200:
+                raise ValueError('Укажите команду или фразу длиной до 200 символов.')
+            if kind == 'command':
+                if not re.fullmatch(r'/[a-zA-Z0-9_]{1,32}', value):
+                    raise ValueError('Команда должна начинаться с / и содержать до 32 латинских букв, цифр или _.')
+                if value.lower() in seen_commands: raise ValueError('Команды не должны повторяться.')
+                seen_commands.add(value.lower())
+            action = scenarios[s['id']]
+            if 'text' in action and (not action['text'].strip() or len(action['text']) > 4096):
+                raise ValueError('Заполните ответ для сценария с условием (до 4096 символов).')
+            triggers.append((kind, value.casefold(), action))
+    buttons = [(b.get('label'), scenarios.get(b.get('scenarioId'))) for b in bot['buttons'] if isinstance(b, dict)]
+    if any(not isinstance(label, str) or not label.strip() or len(label) > 100 or not isinstance(action, dict) or ('text' in action and (not action['text'].strip() or len(action['text']) > 4096)) for label, action in buttons):
+        raise ValueError('Добавьте кнопки с непустыми названиями и сценариями (ответ до 4096 символов).')
+    schedule = bot.get('schedule', [])
+    if not isinstance(schedule, list) or len(schedule) > 100: raise ValueError('Недопустимое расписание.')
+    events = []
+    for item in schedule:
+        if not isinstance(item, dict) or not isinstance(item.get('time'), str) or not re.fullmatch(r'(?:[01][0-9]|2[0-3]):[0-5][0-9]', item['time']):
+            raise ValueError('Укажите время напоминания в формате ЧЧ:ММ.')
+        chat = item.get('chatId')
+        if not isinstance(chat, str) or not re.fullmatch(r'-?[0-9]{1,20}', chat) or int(chat) == 0:
+            raise ValueError('Укажите числовой chat ID для напоминания.')
+        days = item.get('days')
+        if not isinstance(days, list) or not days or any(type(d) is not int or d < 0 or d > 6 for d in days):
+            raise ValueError('Укажите дни напоминания.')
+        action = scenarios.get(item.get('scenarioId'))
+        if not action or ('text' in action and (not action['text'].strip() or len(action['text']) > 4096)):
+            raise ValueError('Укажите непустой сценарий для напоминания.')
+        events.append((item['time'], int(chat), tuple(days), action))
+    if not buttons and not triggers and not events:
+        raise ValueError('Добавьте кнопку, условие сценария или напоминание.')
+    if len({label.casefold() for label, _ in buttons}) != len(buttons):
+        raise ValueError('Названия кнопок должны быть уникальными.')
+    if len(buttons) > 100:
+        raise ValueError('Допускается не более 100 кнопок.')
+
+    return buttons, triggers, events
+
+
+def match_action(text, buttons, triggers):
+    first = text.split()[0].split("@")[0].casefold() if text.split() else ""
+    action = next((a for kind, value, a in triggers if kind == "command" and value == first), None)
+    if action is None: action = next((a for label, a in buttons if label.casefold() == text.casefold()), None)
+    if action is None: action = next((a for kind, value, a in triggers if kind == "contains" and value in text.casefold()), None)
+    return first == "/start", action
+
+
+def action_text(action):
+    return random.choice(action["replies"]) if "replies" in action else action.get("text", "")
 
 
 class Runtime:
@@ -23,6 +119,7 @@ class Runtime:
         self.error = ''
         self.request = request or self.telegram
         self.animation_slots = threading.BoundedSemaphore(5)
+        self.logs = deque(maxlen=100)
 
     @staticmethod
     def telegram(token, method, payload):
@@ -36,57 +133,23 @@ class Runtime:
 
     def status(self):
         with self.lock:
-            return {'state': self.state, 'error': self.error}
+            return {'state': self.state, 'error': self.error, 'logs': list(self.logs)}
+
+    def log(self, message):
+        with self.lock:
+            self.logs.append(datetime.now().strftime('%H:%M:%S') + ' ' + message)
 
     def start(self, token, bot):
         if not isinstance(token, str) or not token or len(token) > 200 or any(c not in '0123456789:ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz_-' for c in token):
             raise ValueError('Укажите корректный токен бота.')
-        if not isinstance(bot, dict) or not isinstance(bot.get('buttons'), list) or not isinstance(bot.get('scenarios'), list):
-            raise ValueError('Некорректные данные бота.')
-        scenarios = {}
-        triggers = []
-        seen_commands = set()
-        for s in bot['scenarios']:
-            if not isinstance(s, dict) or not isinstance(s.get('id'), str):
-                raise ValueError('Некорректный сценарий.')
-            if s.get('animation') is not None:
-                validate_animation(s['animation'])
-                scenarios[s['id']] = {'animation': s['animation']}
-            else:
-                text = s.get('text')
-                if not isinstance(text, str): raise ValueError('Некорректный ответ.')
-                scenarios[s['id']] = {'text': text}
-            trigger = s.get('trigger')
-            if trigger is not None:
-                if not isinstance(trigger, dict) or trigger.get('type') not in ('command', 'contains') or not isinstance(trigger.get('value'), str):
-                    raise ValueError('Некорректное условие сценария.')
-                kind, value = trigger['type'], trigger['value'].strip()
-                if not value or len(value) > 200:
-                    raise ValueError('Укажите команду или фразу длиной до 200 символов.')
-                if kind == 'command':
-                    if not re.fullmatch(r'/[a-zA-Z0-9_]{1,32}', value):
-                        raise ValueError('Команда должна начинаться с / и содержать до 32 латинских букв, цифр или _.')
-                    if value.lower() in seen_commands: raise ValueError('Команды не должны повторяться.')
-                    seen_commands.add(value.lower())
-                action = scenarios[s['id']]
-                if 'text' in action and (not action['text'].strip() or len(action['text']) > 4096):
-                    raise ValueError('Заполните ответ для сценария с условием (до 4096 символов).')
-                triggers.append((kind, value.casefold(), action))
-        buttons = [(b.get('label'), scenarios.get(b.get('scenarioId'))) for b in bot['buttons'] if isinstance(b, dict)]
-        if any(not isinstance(label, str) or not label.strip() or len(label) > 100 or not isinstance(action, dict) or ('text' in action and (not action['text'].strip() or len(action['text']) > 4096)) for label, action in buttons):
-            raise ValueError('Добавьте кнопки с непустыми названиями и сценариями (ответ до 4096 символов).')
-        if not buttons and not triggers:
-            raise ValueError('Добавьте кнопку или сценарий с командой или фразой.')
-        if len({label.casefold() for label, _ in buttons}) != len(buttons):
-            raise ValueError('Названия кнопок должны быть уникальными.')
-        if len(buttons) > 100:
-            raise ValueError('Допускается не более 100 кнопок.')
+        buttons, triggers, events = compile_bot(bot)
         with self.lock:
             if self.thread and self.thread.is_alive():
                 raise ValueError('Бот уже запущен или останавливается.')
             self.stop_event = threading.Event()
             self.state, self.error = 'starting', ''
-            self.thread = threading.Thread(target=self.run, args=(token, buttons, triggers, self.stop_event), daemon=True)
+            self.logs.append(datetime.now().strftime('%H:%M:%S') + ' Запуск бота')
+            self.thread = threading.Thread(target=self.run, args=(token, buttons, triggers, events, self.stop_event), daemon=True)
             self.thread.start()
 
     def stop(self):
@@ -94,15 +157,17 @@ class Runtime:
             if self.thread and self.thread.is_alive():
                 self.stop_event.set()
                 self.state = 'stopping'
+                self.logs.append(datetime.now().strftime('%H:%M:%S') + ' Остановка бота')
 
-    def run(self, token, buttons, triggers, stop):
+    def run(self, token, buttons, triggers, events, stop):
         try:
             self.request(token, 'getMe', {})
             with self.lock:
                 if not stop.is_set(): self.state = 'running'
+            if events:
+                threading.Thread(target=self.schedule_loop, args=(token, events, stop), daemon=True).start()
             offset = None
             keyboard = {'keyboard': [[{'text': label}] for label, _ in buttons], 'resize_keyboard': True}
-            replies = {label.casefold(): action for label, action in buttons}
             while not stop.is_set():
                 try:
                     payload = {'timeout': 20, 'allowed_updates': ['message']}
@@ -114,16 +179,16 @@ class Runtime:
                         chat = message.get('chat', {})
                         text = message.get('text', '')
                         if not chat.get('id') or not isinstance(text, str): continue
-                        first = text.split()[0].split('@')[0].casefold() if text.split() else ''
-                        is_start = first == '/start'
-                        command = next((action for kind, value, action in triggers if kind == 'command' and value == first), None)
-                        action = command or replies.get(text.casefold())
-                        if action is None:
-                            action = next((action for kind, value, action in triggers if kind == 'contains' and value in text.casefold()), None)
+                        self.log(f"Получено сообщение · chat ID {chat['id']}")
+                        is_start, action = match_action(text, buttons, triggers)
                         if is_start and action is None and buttons:
                             self.request(token, 'sendMessage', {'chat_id': chat['id'], 'text': 'Выберите кнопку:', 'reply_markup': keyboard})
                         elif action:
-                            markup = keyboard if is_start and buttons else None
+                            self.log('Получено сообщение: найден сценарий')
+                            inline = action.get('inline')
+                            if is_start and buttons and inline:
+                                self.request(token, 'sendMessage', {'chat_id': chat['id'], 'text': 'Выберите кнопку:', 'reply_markup': keyboard})
+                            markup = inline or (keyboard if is_start and buttons else None)
                             if 'animation' in action:
                                 if self.animation_slots.acquire(blocking=False):
                                     user = message.get('from', {}).get('first_name', '')
@@ -131,7 +196,7 @@ class Runtime:
                                 else:
                                     self.request(token, 'sendMessage', {'chat_id': chat['id'], 'text': 'Слишком много анимаций, попробуйте позже.'})
                             else:
-                                body = {'chat_id': chat['id'], 'text': action['text']}
+                                body = {'chat_id': chat['id'], 'text': action_text(action)}
                                 if markup: body['reply_markup'] = markup
                                 self.request(token, 'sendMessage', body)
                     with self.lock: self.error = ''
@@ -144,6 +209,29 @@ class Runtime:
             with self.lock: self.state = 'stopped'
 
 
+    def schedule_loop(self, token, events, stop):
+        sent = {}
+        while not stop.is_set():
+            now = datetime.now()
+            for index, (time_label, chat, days, action) in enumerate(events):
+                key = now.strftime('%Y-%m-%d')
+                if now.weekday() not in days or now.strftime('%H:%M') != time_label or sent.get(index) == key:
+                    continue
+                sent[index] = key
+                try:
+                    if 'animation' in action:
+                        if self.animation_slots.acquire(blocking=False):
+                            threading.Thread(target=self.animate, args=(token, chat, action['animation'], '', stop, action.get('inline')), daemon=True).start()
+                        else: self.log('Напоминание пропущено: много анимаций')
+                    else:
+                        body = {'chat_id': chat, 'text': action_text(action)}
+                        if action.get('inline'): body['reply_markup'] = action['inline']
+                        self.request(token, 'sendMessage', body)
+                    self.log('Выполнено напоминание')
+                except Exception:
+                    self.log('Ошибка отправки напоминания; проверьте chat ID и подключение')
+            stop.wait(5)
+
     def animate(self, token, chat_id, spec, user, stop, markup=None):
         try:
             sequence = frames(spec, user if isinstance(user, str) else '')
@@ -152,11 +240,13 @@ class Runtime:
             if final.strip() and final != sequence[-1]: sequence.append(final[:3500])
             if stop.is_set(): return
             body = {'chat_id': chat_id, 'text': sequence[0]}
-            if markup: body['reply_markup'] = markup
+            if markup and ('inline_keyboard' not in markup or len(sequence) == 1): body['reply_markup'] = markup
             sent = self.request(token, 'sendMessage', body)
-            for frame in sequence[1:]:
+            for index, frame in enumerate(sequence[1:], start=1):
                 if stop.wait(spec.get('interval', 700) / 1000): break
-                self.request(token, 'editMessageText', {'chat_id': chat_id, 'message_id': sent['message_id'], 'text': frame})
+                edit = {'chat_id': chat_id, 'message_id': sent['message_id'], 'text': frame}
+                if markup and 'inline_keyboard' in markup and index == len(sequence) - 1: edit['reply_markup'] = markup
+                self.request(token, 'editMessageText', edit)
         except Exception:
             with self.lock: self.error = 'Не удалось воспроизвести анимацию. Проверьте связь и ограничения Telegram.'
         finally:
@@ -200,6 +290,19 @@ class Handler(SimpleHTTPRequestHandler):
             if not isinstance(data, dict): raise ValueError('Некорректный запрос.')
             if self.path == '/api/start': runtime.start(data.get('token'), data.get('bot'))
             elif self.path == '/api/stop': runtime.stop()
+            elif self.path == '/api/import-python':
+                return self.send_json(200, {'packs': extract_lists(data.get('source'))})
+            elif self.path == '/api/simulate':
+                text = data.get('text')
+                if not isinstance(text, str) or len(text) > 4096: raise ValueError('Введите сообщение до 4096 символов.')
+                buttons, triggers, _ = compile_bot(data.get('bot'))
+                is_start, selected = match_action(text, buttons, triggers)
+                if selected is None:
+                    return self.send_json(200, {'result': 'Показать клавиатуру' if is_start and buttons else 'Подходящий сценарий не найден.'})
+                if 'animation' in selected:
+                    result = 'Анимация: ' + selected['animation']['preset'] + '\nПервый кадр: ' + frames(selected['animation'], 'Пользователь')[0]
+                else: result = action_text(selected)
+                return self.send_json(200, {'result': result})
             else: return self.send_error(404)
             self.send_json(200, runtime.status())
         except (ValueError, TypeError, json.JSONDecodeError) as exc:
