@@ -1,12 +1,17 @@
 'use strict';
 const KEY = 'botcontrol-editor-v1';
+const PRESETS = {spinner:'⠋ Спиннер',progress:'▰ Прогресс-бар',dots:'… Точки',countdown:'⏳ Отсчёт',typewriter:'⌨ Печатная машинка',matrix:'🟩 Матрица',slot:'🎰 Слот-машина',moon:'🌕 Фазы луны',clock:'🕐 Часы',heart:'❤️ Сердце',custom:'🎞 Свои кадры'};
+const newAnim = () => ({preset:'spinner',text:'Загрузка',interval:700,loops:1,count:5,final:'',frames:''});
+function validAnim(a) { return a && typeof a === 'object' && Object.hasOwn(PRESETS,a.preset) && ['text','final','frames'].every(k=>typeof a[k] === 'string' && a[k].length <= 20000) && [['interval',500,3000],['loops',1,10],['count',1,30]].every(([k,min,max])=>Number.isInteger(a[k]) && a[k]>=min && a[k]<=max); }
+function download(data,name){const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});const url=URL.createObjectURL(blob),a=element('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
+
 const $ = id => document.getElementById(id);
 const fresh = () => ({format:'botcontrol',version:1,name:'Мой бот',scenarios:[],buttons:[]});
 const id = () => { const bytes = new Uint8Array(16); crypto.getRandomValues(bytes); return Array.from(bytes, b => b.toString(16).padStart(2, '0')).join(''); };
 function validate(x) {
   if (!x || x.format !== 'botcontrol' || x.version !== 1 || typeof x.name !== 'string' || !Array.isArray(x.scenarios) || !Array.isArray(x.buttons)) throw Error('Неподдерживаемый или повреждённый файл .bc.');
   const ids = new Set();
-  for (const s of x.scenarios) { if (!s || typeof s.id !== 'string' || !s.id || ids.has(s.id) || typeof s.name !== 'string' || typeof s.text !== 'string') throw Error('Некорректный список сценариев.'); ids.add(s.id); }
+  for (const s of x.scenarios) { if (!s || typeof s.id !== 'string' || !s.id || ids.has(s.id) || typeof s.name !== 'string' || typeof s.text !== 'string' || (s.animation != null && !validAnim(s.animation))) throw Error('Некорректный список сценариев.'); ids.add(s.id); }
   const buttonIds = new Set();
   for (const b of x.buttons) { if (!b || typeof b.id !== 'string' || !b.id || buttonIds.has(b.id) || typeof b.label !== 'string' || typeof b.scenarioId !== 'string' || (b.scenarioId && !ids.has(b.scenarioId))) throw Error('Некорректный список кнопок или привязка сценария.'); buttonIds.add(b.id); }
   return x;
@@ -23,7 +28,14 @@ function render() {
  bot.scenarios.forEach(s=>{ const card=element('div','item'), row=element('div','row');
  row.appendChild(field('Название сценария',s.name,'Например, Приветствие',v=>{s.name=v;save(); updateSelects();}));
  row.appendChild(element('div')); const del=element('button','delete','Удалить'); del.onclick=()=>{if(!confirm('Удалить сценарий? Привязанные кнопки останутся без сценария.'))return; bot.scenarios=bot.scenarios.filter(x=>x.id!==s.id); bot.buttons.forEach(b=>{if(b.scenarioId===s.id)b.scenarioId='';});save();render();}; row.appendChild(del); card.appendChild(row);
- const text=element('textarea'); text.value=s.text; text.placeholder='Текст ответа'; text.setAttribute('aria-label','Текст ответа сценария'); text.oninput=()=>{s.text=text.value;save();};card.appendChild(text);scenarios.appendChild(card); });
+ const kindWrap=element('label','','Действие сценария'),kind=element('select'); [['text','Текстовый ответ'],['animation','Анимация']].forEach(([value,title])=>{const opt=element('option','',title);opt.value=value;kind.appendChild(opt);});kind.value=s.animation?'animation':'text';kind.onchange=()=>{if(kind.value==='animation')s.animation=newAnim();else delete s.animation;save();render();};kindWrap.appendChild(kind);card.appendChild(kindWrap);
+ if(!s.animation){const text=element('textarea'); text.value=s.text; text.placeholder='Текст ответа'; text.setAttribute('aria-label','Текст ответа сценария'); text.oninput=()=>{s.text=text.value;save();};card.appendChild(text);}else{
+ const a=s.animation, presetLabel=element('label','','Шаблон из Android'),preset=element('select'); Object.entries(PRESETS).forEach(([value,title])=>{const opt=element('option','',title);opt.value=value;preset.appendChild(opt);});preset.value=a.preset;preset.onchange=()=>{a.preset=preset.value;save();render();};presetLabel.appendChild(preset);card.appendChild(presetLabel);
+ card.appendChild(field('Подпись ({user} — имя пользователя)',a.text,'Текст',v=>{a.text=v;save();}));
+ if(a.preset==='custom'){const label=element('label','','Кадры: разделяйте строкой ---'),frames=element('textarea');frames.value=a.frames;frames.placeholder='Первый кадр\n---\nВторой кадр';frames.oninput=()=>{a.frames=frames.value;save();};label.appendChild(frames);card.appendChild(label);}
+ const numbers=element('div','row');[['interval','Пауза, мс (500–3000)',500,3000],['loops','Повторы (1–10)',1,10],['count','Отсчёт (1–30)',1,30]].forEach(([key,title,min,max])=>{const l=element('label','',title),input=element('input');input.type='number';input.min=min;input.max=max;input.value=a[key];input.onchange=()=>{a[key]=Math.min(max,Math.max(min,Math.round(Number(input.value)||min)));input.value=a[key];save();};l.appendChild(input);numbers.appendChild(l);});card.appendChild(numbers);
+ card.appendChild(field('Итог после анимации',a.final,'Необязательно',v=>{a.final=v;save();}));const exp=element('button','','Экспорт анимации .bca');exp.onclick=()=>download({format:'botcontrol-animation',version:1,animation:a},'animation.bca');card.appendChild(exp);
+ }scenarios.appendChild(card); });
  const buttons=$('buttons');buttons.replaceChildren();
  if(!bot.buttons.length) buttons.appendChild(element('div','empty','Пока нет кнопок. Добавьте кнопку и привяжите сценарий.'));
  bot.buttons.forEach(b=>{const card=element('div','item'),row=element('div','row');row.appendChild(field('Надпись кнопки',b.label,'Например, Начать',v=>{b.label=v;save();}));const wrap=element('div'),label=element('label','','Сценарий'),select=element('select'); select.dataset.buttonId=b.id; select.onchange=()=>{b.scenarioId=select.value;save();};label.appendChild(select);wrap.appendChild(label);row.appendChild(wrap);const del=element('button','delete','Удалить');del.onclick=()=>{if(!confirm('Удалить кнопку?'))return;bot.buttons=bot.buttons.filter(x=>x.id!==b.id);save();render();};row.appendChild(del);card.appendChild(row);buttons.appendChild(card);}); updateSelects();
@@ -33,7 +45,9 @@ $('botName').oninput=e=>{bot.name=e.target.value;save();};
 $('addScenario').onclick=()=>{bot.scenarios.push({id:id(),name:'Новый сценарий',text:''});save();render();};
 $('addButton').onclick=()=>{bot.buttons.push({id:id(),label:'',scenarioId:''});save();render();};
 $('importBot').onclick=()=>$('botFile').click();$('importAnswers').onclick=()=>$('answersFile').click();
-$('exportBot').onclick=()=>{const blob=new Blob([JSON.stringify(bot,null,2)],{type:'application/json'});const url=URL.createObjectURL(blob),a=element('a');a.href=url;a.download='botcontrol-bot.bc';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};
+$('exportBot').onclick=()=>download(bot,'botcontrol-bot.bc');
+$('importAnimation').onclick=()=>$('animationFile').click();
+$('animationFile').onchange=async e=>{const f=e.target.files[0];e.target.value='';if(!f)return;try{if(f.size>1024*1024)throw Error('Файл слишком большой.');const x=JSON.parse(await f.text());if(x.format!=='botcontrol-animation'||x.version!==1||!validAnim(x.animation))throw Error('Неподдерживаемый файл анимации.');bot.scenarios.push({id:id(),name:'Импортированная анимация',text:'',animation:x.animation});save();render();$('notice').textContent='Анимация добавлена в сценарии.';}catch(err){$('notice').textContent='Ошибка импорта: '+err.message;}};
 $('botFile').onchange=async e=>{const f=e.target.files[0];e.target.value='';if(!f)return;try{if(f.size>5*1024*1024)throw Error('Файл слишком большой (максимум 5 МБ).');const data=validate(JSON.parse(await f.text()));if(!confirm('Импорт заменит текущего бота в редакторе. Продолжить?'))return;bot=data;save();render();$('notice').textContent='Бот импортирован.';}catch(err){$('notice').textContent='Ошибка импорта: '+err.message;}};
 $('answersFile').onchange=async e=>{const f=e.target.files[0];e.target.value='';if(!f)return;try{if(f.size>5*1024*1024)throw Error('Файл слишком большой (максимум 5 МБ).');const text=(await f.text()).replace(/^\uFEFF/,'').replace(/\r\n?/g,'\n');const matches=[...text.matchAll(/^\s*(\d+)[.)]\s*([^\n]*(?:\n(?!\s*\d+[.)]\s*)[^\n]*)*)/gm)];if(!matches.length)throw Error('Не найдены заготовки. Каждая должна начинаться с номера и точки: 1. Текст');const entries=matches.map(m=>({number:m[1],text:m[2].trim()})).filter(x=>x.text);if(!entries.length)throw Error('Заготовки пусты.');entries.forEach(entry=>bot.scenarios.push({id:id(),name:'Заготовка '+entry.number,text:entry.text}));save();render();$('notice').textContent=`Импортировано заготовок: ${entries.length}.`; }catch(err){$('notice').textContent='Ошибка импорта: '+err.message;}};
 render();

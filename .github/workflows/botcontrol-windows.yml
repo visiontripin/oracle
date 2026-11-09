@@ -67,16 +67,16 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $tag = 'botcontrol-windows-preview-0.1.0'
+          $tag = 'botcontrol-windows-preview-0.2.0'
           $exe = 'tg-bot-control/desktop-web/dist/BotControl.exe'
           $hash = (Get-FileHash $exe -Algorithm SHA256).Hash.ToLower()
           $notes = @"
           Экспериментальная локальная версия для Windows. Python не требуется. Откройте BotControl.exe, затем используйте браузер. Консольное окно должно оставаться открытым.
 
-          Реализованы текстовые сценарии, клавиатура, импорт нумерованных ответов и формат .bc. Это не полная версия Android: нет импорта .py, совместимости .bc с Android, расписаний и прочих функций. Реальный Telegram-бот в CI не проверялся. Файл не подписан.
+          Реализованы текстовые сценарии и анимации, шаблоны, клавиатура, импорт нумерованных ответов, формат .bc и обмен анимациями .bca. Это не полная версия Android: нет импорта .py, совместимости .bc с Android, расписаний и прочих функций. Реальный Telegram-бот в CI не проверялся. Файл не подписан.
 
           SHA-256: $hash
           "@
           $notes | Set-Content -Encoding utf8 windows-release-notes.txt
-          gh release create $tag $exe --target $env:GITHUB_SHA --prerelease --title 'BotControl для Windows — предварительная версия 0.1.0' --notes-file windows-release-notes.txt
+          gh release create $tag $exe --target $env:GITHUB_SHA --prerelease --title 'BotControl для Windows — предварительная версия 0.2.0' --notes-file windows-release-notes.txt
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

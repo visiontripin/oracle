@@ -8,6 +8,7 @@ import sys
 import threading
 import urllib.request
 import webbrowser
+from animations import frames, validate_animation
 
 ROOT = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
 
@@ -20,6 +21,7 @@ class Runtime:
         self.state = 'stopped'
         self.error = ''
         self.request = request or self.telegram
+        self.animation_slots = threading.BoundedSemaphore(5)
 
     @staticmethod
     def telegram(token, method, payload):
@@ -40,9 +42,19 @@ class Runtime:
             raise ValueError('Укажите корректный токен бота.')
         if not isinstance(bot, dict) or not isinstance(bot.get('buttons'), list) or not isinstance(bot.get('scenarios'), list):
             raise ValueError('Некорректные данные бота.')
-        scenarios = {s['id']: s['text'] for s in bot['scenarios'] if isinstance(s, dict) and isinstance(s.get('id'), str) and isinstance(s.get('text'), str)}
+        scenarios = {}
+        for s in bot['scenarios']:
+            if not isinstance(s, dict) or not isinstance(s.get('id'), str):
+                raise ValueError('Некорректный сценарий.')
+            if s.get('animation') is not None:
+                validate_animation(s['animation'])
+                scenarios[s['id']] = {'animation': s['animation']}
+            else:
+                text = s.get('text')
+                if not isinstance(text, str): raise ValueError('Некорректный ответ.')
+                scenarios[s['id']] = {'text': text}
         buttons = [(b.get('label'), scenarios.get(b.get('scenarioId'))) for b in bot['buttons'] if isinstance(b, dict)]
-        if not buttons or any(not isinstance(label, str) or not label.strip() or len(label) > 100 or not isinstance(text, str) or not text.strip() or len(text) > 4096 for label, text in buttons):
+        if not buttons or any(not isinstance(label, str) or not label.strip() or len(label) > 100 or not isinstance(action, dict) or ('text' in action and (not action['text'].strip() or len(action['text']) > 4096)) for label, action in buttons):
             raise ValueError('Добавьте кнопки с непустыми названиями и сценариями (ответ до 4096 символов).')
         if len({label for label, _ in buttons}) != len(buttons):
             raise ValueError('Названия кнопок должны быть уникальными.')
@@ -84,7 +96,15 @@ class Runtime:
                         if text.split(' ', 1)[0].split('@')[0] == '/start':
                             self.request(token, 'sendMessage', {'chat_id': chat['id'], 'text': 'Выберите кнопку:', 'reply_markup': keyboard})
                         elif text in replies:
-                            self.request(token, 'sendMessage', {'chat_id': chat['id'], 'text': replies[text]})
+                            action = replies[text]
+                            if 'animation' in action:
+                                if self.animation_slots.acquire(blocking=False):
+                                    user = message.get('from', {}).get('first_name', '')
+                                    threading.Thread(target=self.animate, args=(token, chat['id'], action['animation'], user, stop), daemon=True).start()
+                                else:
+                                    self.request(token, 'sendMessage', {'chat_id': chat['id'], 'text': 'Слишком много анимаций, попробуйте позже.'})
+                            else:
+                                self.request(token, 'sendMessage', {'chat_id': chat['id'], 'text': action['text']})
                     with self.lock: self.error = ''
                 except Exception:
                     with self.lock: self.error = 'Ошибка связи с Telegram. Повторная попытка через 5 секунд. Проверьте сеть и убедитесь, что бот не запущен в другом месте.'
@@ -93,6 +113,23 @@ class Runtime:
             with self.lock: self.error = 'Не удалось подключить бота. Проверьте токен и интернет.'
         finally:
             with self.lock: self.state = 'stopped'
+
+
+    def animate(self, token, chat_id, spec, user, stop):
+        try:
+            sequence = frames(spec, user if isinstance(user, str) else '')
+            final = spec.get('final', '').replace('{user}', user if isinstance(user, str) else '')
+            if not final and spec['preset'] == 'countdown': final = '🚀'
+            if final.strip() and final != sequence[-1]: sequence.append(final[:3500])
+            if stop.is_set(): return
+            sent = self.request(token, 'sendMessage', {'chat_id': chat_id, 'text': sequence[0]})
+            for frame in sequence[1:]:
+                if stop.wait(spec.get('interval', 700) / 1000): break
+                self.request(token, 'editMessageText', {'chat_id': chat_id, 'message_id': sent['message_id'], 'text': frame})
+        except Exception:
+            with self.lock: self.error = 'Не удалось воспроизвести анимацию. Проверьте связь и ограничения Telegram.'
+        finally:
+            self.animation_slots.release()
 
 
 runtime = Runtime()
