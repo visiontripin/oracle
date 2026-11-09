@@ -240,7 +240,7 @@ fun ButtonsScreen(localStore: LocalBotStore, repository: BotRepository, onBack: 
                     }
                     if (duplicateButton || conflictingRule || matches.size > 1)
                         Text("Такое название уже используется или найдено несколько правил. Измените название либо устраните конфликт в правилах ответов.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-                    Text("Если другое правило подходит под текст кнопки раньше, оно может перехватить нажатие. Проверить порядок можно в правилах ответов.", style = MaterialTheme.typography.bodySmall)
+                    Text("Если другое правило подходит под текст кнопки раньше, оно может перехватить нажатие. Проверьте правила ответов на пересечения.", style = MaterialTheme.typography.bodySmall)
                 }
             },
             confirmButton = {
