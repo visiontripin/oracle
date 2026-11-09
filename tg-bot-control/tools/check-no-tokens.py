@@ -21,6 +21,9 @@ SKIP_EXT = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".ico", ".pdf", ".zip",
 
 
 def main():
+    # Windows-консоль CI не всегда UTF-8 — не падаем на кириллице в выводе
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     bad = []
     scanned = 0
     for dp, dirs, files in os.walk(ROOT):
