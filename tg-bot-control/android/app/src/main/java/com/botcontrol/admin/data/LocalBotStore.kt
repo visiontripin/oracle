@@ -72,6 +72,14 @@ class LocalBotStore(context: Context) {
         appContext.localBotDataStore.edit { it[KEY_MODE] = mode }
     }
 
+    // ---------- автозапуск ботов после перезагрузки телефона ----------
+    suspend fun autostartOnBoot(): Boolean =
+        appContext.localBotDataStore.data.map { it[KEY_AUTOSTART] ?: true }.first()
+
+    suspend fun setAutostartOnBoot(value: Boolean) {
+        appContext.localBotDataStore.edit { it[KEY_AUTOSTART] = value }
+    }
+
     // ============================================================
     // ПРОФИЛИ БОТОВ
     // ============================================================
@@ -475,6 +483,7 @@ class LocalBotStore(context: Context) {
         val KEY_MENU = stringPreferencesKey("menu_commands")
         val KEY_PROFILES = stringPreferencesKey("bot_profiles")
         val KEY_ACTIVE_BOT = longPreferencesKey("active_bot_id")
+        val KEY_AUTOSTART = booleanPreferencesKey("autostart_on_boot")
 
         // ключи с суффиксом botId
         private fun schedKey(id: Long) = stringPreferencesKey("schedule_$id")

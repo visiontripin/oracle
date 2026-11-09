@@ -62,12 +62,19 @@ fun BotTreeScreen(
     var info by remember { mutableStateOf("") }
     var llmOn by remember { mutableStateOf(false) }
     var aiModel by remember { mutableStateOf("") }
+    var autostartOnBoot by remember { mutableStateOf(true) }
+    var batteryOk by remember { mutableStateOf(true) }
 
     LaunchedEffect(botId) {
         localStore.setActiveBot(botId)
         profile = localStore.profile(botId)
         llmOn = localStore.llmEnabled(botId)
         aiModel = localStore.aiModel(botId)
+        autostartOnBoot = localStore.autostartOnBoot()
+        batteryOk = try {
+            val pm = context.getSystemService(android.content.Context.POWER_SERVICE) as? android.os.PowerManager
+            pm?.isIgnoringBatteryOptimizations(context.packageName) != false
+        } catch (t: Throwable) { true }
     }
 
     val st = states[botId]
@@ -182,6 +189,45 @@ fun BotTreeScreen(
                                 }
                             },
                         )
+                    }
+                    Spacer(Modifier.height(6.dp))
+                    // Автозапуск после перезагрузки телефона
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text("Автозапуск после перезагрузки",
+                                style = MaterialTheme.typography.bodyMedium)
+                            Text("Включённые боты поднимаются сами после включения телефона",
+                                style = MaterialTheme.typography.bodySmall)
+                        }
+                        Switch(
+                            autostartOnBoot,
+                            onCheckedChange = { on ->
+                                autostartOnBoot = on
+                                scope.launch { localStore.setAutostartOnBoot(on) }
+                            },
+                        )
+                    }
+                    if (!batteryOk) {
+                        Spacer(Modifier.height(6.dp))
+                        OutlinedButton(onClick = {
+                            try {
+                                context.startActivity(
+                                    android.content.Intent(
+                                        android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                                        android.net.Uri.parse("package:" + context.packageName),
+                                    ),
+                                )
+                                info = "🔋 Фоновая работа разрешена — боты не будут останавливаться в спящем режиме"
+                            } catch (t: Throwable) {
+                                info = "Не удалось открыть настройки батареи — разрешите фоновую работу для BotControl вручную"
+                            }
+                            batteryOk = true
+                        }, modifier = Modifier.fillMaxWidth()) {
+                            Text("🔋 Разрешить работу в фоне")
+                        }
+                        Text("Android может останавливать ботов в спящем режиме — разрешите фоновую работу, чтобы опрос Telegram не прерывался.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }

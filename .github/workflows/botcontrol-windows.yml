@@ -5,10 +5,12 @@ on:
     branches: ["arena/**", "main"]
     paths:
       - "tg-bot-control/desktop-web/**"
+      - "tg-bot-control/tools/check-no-tokens.py"
       - ".github/workflows/botcontrol-windows.yml"
   pull_request:
     paths:
       - "tg-bot-control/desktop-web/**"
+      - "tg-bot-control/tools/check-no-tokens.py"
       - ".github/workflows/botcontrol-windows.yml"
   workflow_dispatch:
 
@@ -24,6 +26,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+      - name: No live tokens in the tree
+        run: python tg-bot-control/tools/check-no-tokens.py
       - name: Test runtime
         working-directory: tg-bot-control/desktop-web
         run: |
@@ -72,16 +76,31 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $tag = 'botcontrol-windows-preview-0.5.0'
+          $tag = 'botcontrol-windows-preview-0.6.0'
           $exe = 'tg-bot-control/desktop-web/dist/BotControl.exe'
           $hash = (Get-FileHash $exe -Algorithm SHA256).Hash.ToLower()
-          $notes = @"
-          Экспериментальная локальная версия для Windows. Python не требуется. Откройте BotControl.exe, затем используйте браузер. Консольное окно должно оставаться открытым.
-
-          Добавлены промпт и проверяемый импорт JSON-настроек от языковой модели. Реализованы команды и реакции на фразы, текстовые сценарии и анимации, шаблоны, клавиатура, импорт нумерованных ответов, формат .bc и обмен анимациями .bca. Есть базовые напоминания, ссылки под сообщениями, наборы ответов, имитация и частичный импорт списков из .py. Это не полная версия Android: импорт .py ограничен списками, .bc несовместим с Android, callback-кнопки не поддерживаются. Реальный Telegram-бот в CI не проверялся. Файл не подписан.
-
-          SHA-256: $hash
-          "@
+          $notes = @(
+            'Экспериментальная локальная версия для Windows. Python не требуется: распакуйте архив и откройте BotControl.exe, затем используйте браузер на http://127.0.0.1:8765/. Консольное окно должно оставаться открытым: пока окно работает, бот может отвечать.',
+            '',
+            'Новое в 0.6.0 (исправления по итогам тестирования): остановка бота занимает до 5 секунд, добавлена кнопка «Перезапустить»; сообщения больше не теряются, если ответ одному пользователю не удался; работают адреса localhost и 127.0.0.1; ошибки показывают реальную причину (токен против интернета); фразы-триггеры срабатывают по целым словам («кот» не срабатывает на «скот»); команда /chatid показывает chat ID для напоминаний; напоминание отрабатывает в окне допуска 10 минут и повторяется при сбое; импорт списков из Android .py отсеивает кадры анимаций и служебные списки и показывает превью; журнал показывает имя сценария.',
+            '',
+            'Это не полная версия Android: импорт .py ограничен списками, .bc не совместим с Android, callback-кнопки не поддерживаются. Реальный Telegram-бот в CI не проверялся. Файл не подписан — Windows может предупредить при первом запуске.',
+            '',
+            "SHA-256: $hash"
+          ) -join "`n"
           $notes | Set-Content -Encoding utf8 windows-release-notes.txt
-          gh release create $tag $exe --target $env:GITHUB_SHA --prerelease --title 'BotControl для Windows — предварительная версия 0.5.0' --notes-file windows-release-notes.txt
+          # Тег — коммит с BotControl.exe внутри: файл скачивается
+          # git fetch <тег> + git show (как APK в botcontrol-apk.yml).
+          Copy-Item $exe 'tg-bot-control/desktop-web/BotControl.exe' -Force
+          git add -f tg-bot-control/desktop-web/BotControl.exe
+          git -c user.name="botcontrol-ci" -c user.email="botcontrol-ci@users.noreply.github.com" commit --no-verify -m "BotControl.exe 0.6.0 (preview) — из $($env:GITHUB_SHA.Substring(0,7))"
+          git tag -f $tag
+          git push --force origin "refs/tags/$tag"
+          gh release view $tag 2>$null | Out-Null
+          if ($LASTEXITCODE -eq 0) {
+            gh release upload $tag $exe --clobber
+            gh release edit $tag --notes-file windows-release-notes.txt --prerelease
+          } else {
+            gh release create $tag $exe --prerelease --title 'BotControl для Windows — предварительная версия 0.6.0' --notes-file windows-release-notes.txt
+          }
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

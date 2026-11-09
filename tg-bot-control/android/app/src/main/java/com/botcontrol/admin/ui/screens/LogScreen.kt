@@ -38,6 +38,7 @@ import java.util.Locale
 fun LogScreen(onBack: () -> Unit) {
     val log by DeviceLlm.log.collectAsState()
     val clipboard = LocalClipboardManager.current
+    val context = androidx.compose.ui.platform.LocalContext.current
     val timeFormat = remember { SimpleDateFormat("HH:mm:ss", Locale.getDefault()) }
 
     val fullText = remember(log) {
@@ -63,6 +64,18 @@ fun LogScreen(onBack: () -> Unit) {
                 DeviceLlm.log("🧺 Журнал очищен")
             }, modifier = Modifier.weight(1f)) { Text("Очистить") }
         }
+        Spacer(Modifier.padding(2.dp))
+        OutlinedButton(onClick = {
+            runCatching {
+                val send = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                    type = "text/plain"
+                    putExtra(android.content.Intent.EXTRA_TEXT, fullText)
+                }
+                context.startActivity(
+                    android.content.Intent.createChooser(send, "Поделиться журналом"),
+                )
+            }
+        }, modifier = Modifier.fillMaxWidth()) { Text("📤 Поделиться журналом") }
         Spacer(Modifier.padding(6.dp))
         SelectionContainer {
             Column(

@@ -31,6 +31,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: No live tokens in the tree
+        run: python3 tg-bot-control/tools/check-no-tokens.py
+
       - name: Bot isolation check (botId in service/ and data/)
         run: python3 tg-bot-control/tools/check-bot-isolation.py
 
@@ -128,7 +131,14 @@ jobs:
             gh release upload "$TAG" $ASSETS --clobber
             gh release edit "$TAG" --notes-file "$NOTES" --prerelease
           else
+            # Тег — коммит с APK внутри (как в рецепте handoff/02-build-release.txt:
+            # git fetch тега + git show). Живой APK в ветки не попадает.
+            git add -f tg-bot-control/BotControl-debug.apk
+            git -c user.name="botcontrol-ci" -c user.email="botcontrol-ci@users.noreply.github.com" \
+              commit --no-verify -m "BotControl v${VN} (code ${VC}) — APK из ${GITHUB_SHA::7}"
+            git tag -f "$TAG"
+            git push --force origin "refs/tags/$TAG"
             gh release create "$TAG" $ASSETS \
-              --target "$GITHUB_SHA" --prerelease --title "BotControl v${VN} (code ${VC})" --notes-file "$NOTES"
+              --prerelease --title "BotControl v${VN} (code ${VC})" --notes-file "$NOTES"
           fi
           echo "::notice title=release::${TAG}"

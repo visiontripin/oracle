@@ -8,7 +8,7 @@ import sys
 from http.server import ThreadingHTTPServer
 import time
 import unittest
-from server import Runtime, Handler, compile_bot, action_text
+from server import Runtime, Handler, compile_bot, action_text, match_action, connect_error, TgError
 from android_import import extract_lists
 from animations import PRESETS, frames, validate_animation
 
@@ -105,7 +105,6 @@ class NewFeaturesTests(unittest.TestCase):
         source = "import os\nos.system('this must never run')\nMY_REPLIES = ['один', 'два']\nBOT_TOKEN = 'secret'\n"
         self.assertEqual(extract_lists(source), [{'name':'MY_REPLIES','items':['один','два']}])
         with self.assertRaises(ValueError): extract_lists('def broken(')
-
     def test_schedule_once_per_day(self):
         bot = {'scenarios':[{'id':'1','text':'Привет'}], 'buttons':[], 'schedule':[{'id':'a','time':'09:00','chatId':'123', 'days':[0], 'scenarioId':'1'}]}
         _, _, events = compile_bot(bot)
@@ -227,5 +226,169 @@ class HttpTests(unittest.TestCase):
         result = subprocess.run([sys.executable, 'server.py', '--host', '0.0.0.0', '--no-browser'], capture_output=True, text=True, timeout=5)
         self.assertNotEqual(result.returncode, 0)
         self.assertIn('private Wi-Fi', result.stderr)
+
+class FixTests(unittest.TestCase):
+    """Регрессия исправлений из рецензии: W1–W8 и кнопка «Перезапустить»."""
+
+    BOT = {'scenarios': [{'id': 'a', 'name': 'Привет', 'text': 'Ответ', 'trigger': {'type': 'command', 'value': '/start'}}], 'buttons': []}
+
+    def test_failed_send_does_not_drop_batch(self):
+        # W1: сбой отправки одному чату не теряет остальные сообщения пакета
+        received = []
+        def request(token, method, payload):
+            if method == 'getMe': return {'id': 1}
+            if method == 'getUpdates':
+                if not received:
+                    return [
+                        {'update_id': 1, 'message': {'chat': {'id': 1}, 'text': '/start'}},
+                        {'update_id': 2, 'message': {'chat': {'id': 2}, 'text': '/start'}},
+                        {'update_id': 3, 'message': {'chat': {'id': 3}, 'text': '/start'}},
+                    ]
+                time.sleep(.01); return []
+            if method == 'sendMessage':
+                if payload['chat_id'] == 2: raise RuntimeError('403: blocked by user')
+                received.append(payload); return {}
+            return {}
+        r = Runtime(request)
+        r.start('123:ABC', self.BOT)
+        time.sleep(1.0)
+        self.assertEqual([p['chat_id'] for p in received], [1, 3])
+        st = r.status()
+        self.assertEqual(st['state'], 'running')
+        self.assertNotIn('Ошибка связи', st['error'])
+        self.assertTrue(any('chat ID 2' in line for line in st['logs']))
+        r.stop(); r.thread.join(3)
+
+    def test_stop_is_quick_and_poll_is_short(self):
+        # W2: остановка не ждёт 20-секундный long poll
+        payloads = []
+        def request(token, method, payload):
+            if method == 'getMe': return {'id': 1}
+            if method == 'getUpdates': payloads.append(payload); time.sleep(0.5); return []
+            return {}
+        r = Runtime(request)
+        r.start('123:ABC', self.BOT)
+        time.sleep(0.3)
+        t0 = time.time()
+        r.stop()
+        r.thread.join(6)
+        self.assertLess(time.time() - t0, 5)
+        self.assertTrue(payloads)
+        self.assertTrue(all(p.get('timeout') == 5 for p in payloads))
+        self.assertEqual(r.status()['state'], 'stopped')
+
+    def test_restart_reuses_last_token(self):
+        starts = []
+        def request(token, method, payload):
+            if method == 'getMe': starts.append(token); return {'id': 1}
+            if method == 'getUpdates': time.sleep(0.1); return []
+            return {}
+        r = Runtime(request)
+        r.start('123:ABC', self.BOT)
+        time.sleep(0.5)
+        r.restart(None, None)
+        time.sleep(0.5)
+        self.assertEqual(r.status()['state'], 'running')
+        self.assertEqual(starts, ['123:ABC', '123:ABC'])
+        r.stop(); r.thread.join(3)
+
+    def test_phrase_matches_whole_words(self):
+        # W5: «кот» не срабатывает на «скот», «привет» — на «приветствую»
+        bot = {'scenarios': [
+            {'id': '1', 'name': 'Кот', 'text': 'Мяу', 'trigger': {'type': 'contains', 'value': 'кот'}},
+            {'id': '2', 'name': 'Привет', 'text': 'Здравствуй', 'trigger': {'type': 'contains', 'value': 'привет'}}],
+            'buttons': []}
+        buttons, triggers, _ = compile_bot(bot)
+        self.assertIsNone(match_action('скот и стадо', buttons, triggers)[1])
+        self.assertIsNone(match_action('приветствую', buttons, triggers)[1])
+        self.assertEqual(match_action('у нас кот', buttons, triggers)[1]['text'], 'Мяу')
+        self.assertEqual(match_action('Привет!', buttons, triggers)[1]['text'], 'Здравствуй')
+
+    def test_error_messages_are_specific(self):
+        # W4/W6: токен и сеть различаются; внутренние тексты не утекают
+        self.assertIn('токен', connect_error(TgError('Unauthorized', 'token')).lower())
+        self.assertIn('интернет', connect_error(TgError('нет сети', 'offline')).lower())
+        self.assertEqual(connect_error(RuntimeError('secret token')),
+                         'Не удалось подключить бота. Проверьте токен и интернет.')
+        self.assertNotIn('secret', connect_error(RuntimeError('secret token')))
+
+    def test_extract_lists_skips_frames_and_service(self):
+        # W7: кадры анимаций и служебные списки не выдаются за ответы
+        source = ("INTRO_FRAMES = ['photo: https://x/y.png — подпись', 'photo: https://x/z.png']\n"
+                  "ANIM_START = ['кадр один', 'кадр два']\n"
+                  "SCHEDULE = ['a', 'b']\n"
+                  "PHOTO_PACK = ['photo: https://x/1.png', 'photo: https://x/2.png']\n"
+                  "GOOD = ['один', 'два']\n")
+        self.assertEqual(extract_lists(source), [{'name': 'GOOD', 'items': ['один', 'два']}])
+
+    def test_schedule_catchup_window(self):
+        # W8: событие отрабатывает в окне допуска 10 минут, один раз в день
+        bot = {'scenarios': [{'id': '1', 'text': 'Привет'}], 'buttons': [],
+               'schedule': [{'id': 'a', 'time': '09:00', 'chatId': '123', 'days': [0], 'scenarioId': '1'}]}
+        _, _, events = compile_bot(bot)
+        sent = []
+        runtime = Runtime(lambda token, method, payload: sent.append((method, payload)))
+        class Stop:
+            count = 0
+            def is_set(self): return self.count >= 2
+            def wait(self, timeout): self.count += 1; return False
+        with patch('server.datetime') as clock:
+            clock.now.return_value = datetime(2026, 11, 9, 9, 7)  # на 7 минут позже
+            runtime.schedule_loop('123:abc', events, Stop())
+        self.assertEqual(len(sent), 1)
+        # позже окна — не отправляется
+        sent.clear()
+        runtime = Runtime(lambda token, method, payload: sent.append((method, payload)))
+        class Stop2:
+            count = 0
+            def is_set(self): return self.count >= 2
+            def wait(self, timeout): self.count += 1; return False
+        with patch('server.datetime') as clock:
+            clock.now.return_value = datetime(2026, 11, 9, 9, 11)
+            runtime.schedule_loop('123:abc', events, Stop2())
+        self.assertEqual(len(sent), 0)
+
+    def test_schedule_retries_after_failure(self):
+        # W8: сбой отправки — повтор в окне допуска, событие не теряется
+        calls = []
+        def request(token, method, payload):
+            calls.append(1)
+            if len(calls) == 1: raise RuntimeError('сбой сети')
+            return {}
+        bot = {'scenarios': [{'id': '1', 'text': 'Привет'}], 'buttons': [],
+               'schedule': [{'id': 'a', 'time': '09:00', 'chatId': '123', 'days': [0], 'scenarioId': '1'}]}
+        _, _, events = compile_bot(bot)
+        runtime = Runtime(request)
+        class Stop:
+            count = 0
+            def is_set(self): return self.count >= 3
+            def wait(self, timeout): self.count += 1; return False
+        with patch('server.datetime') as clock:
+            clock.now.return_value = datetime(2026, 11, 9, 9, 3)
+            runtime.schedule_loop('123:abc', events, Stop())
+        self.assertEqual(len(calls), 2)
+
+    def test_localhost_host_accepted(self):
+        # W3: http://localhost:<порт>/ работает, как и 127.0.0.1
+        server = ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            for host in (f'127.0.0.1:{server.server_port}', f'localhost:{server.server_port}'):
+                connection = http.client.HTTPConnection('127.0.0.1', server.server_port, timeout=3)
+                connection.request('GET', '/', headers={'Host': host})
+                self.assertEqual(connection.getresponse().status, 200)
+                connection.close()
+            connection = http.client.HTTPConnection('127.0.0.1', server.server_port, timeout=3)
+            connection.request('GET', '/', headers={'Host': 'evil.example'})
+            response = connection.getresponse()
+            self.assertEqual(response.status, 403)
+            self.assertIn('127.0.0.1', response.read().decode('utf-8', 'replace'))
+            connection.close()
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join()
+
 
 if __name__ == '__main__': unittest.main()

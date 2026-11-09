@@ -47,12 +47,14 @@ fun AiSettingsScreen(localStore: LocalBotStore, onBack: () -> Unit) {
     var temperature by remember { mutableStateOf(0.8f) }
     var topK by remember { mutableStateOf(40) }
     var maxTokens by remember { mutableStateOf(1024) }
+    var aiModel by remember { mutableStateOf("") }
 
     LaunchedEffect(Unit) {
         botId = localStore.activeBotId()
         temperature = localStore.aiTemperature(botId)
         topK = localStore.aiTopK(botId)
         maxTokens = localStore.aiMaxTokens(botId)
+        aiModel = localStore.aiModel(botId)
     }
 
     Column(Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState())) {
@@ -62,6 +64,8 @@ fun AiSettingsScreen(localStore: LocalBotStore, onBack: () -> Unit) {
         }
 
         SectionTitle("Стиль генерации")
+        val samplersSupported = !aiModel.endsWith(".litertlm")
+        if (samplersSupported) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
             DropdownField(
                 value = temperature,
@@ -86,6 +90,12 @@ fun AiSettingsScreen(localStore: LocalBotStore, onBack: () -> Unit) {
                 },
                 modifier = Modifier.weight(1f),
             )
+        }
+        } else {
+            Text("Температура и Top-K для модели ${aiModel.take(28)} задаются движком LiteRT-LM — " +
+                "менять их здесь нет смысла. Для настройки сэмплера выберите модель MediaPipe (.task/.bin) во вкладке «Модели».",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Spacer(Modifier.height(8.dp))
         DropdownField(

@@ -10,6 +10,8 @@ from datetime import datetime
 import ipaddress
 import sys
 import threading
+import time
+import urllib.error
 import urllib.request
 from urllib.parse import urlsplit
 import webbrowser
@@ -40,6 +42,7 @@ def compile_bot(bot):
             text = s.get('text')
             if not isinstance(text, str): raise ValueError('Некорректный ответ.')
             scenarios[s['id']] = {'text': text}
+        scenarios[s['id']]['name'] = s.get('name') or ''
         links = s.get('links', [])
         if not isinstance(links, list) or len(links) > 3:
             raise ValueError('Можно добавить не более трёх ссылок под сообщением.')
@@ -68,7 +71,7 @@ def compile_bot(bot):
             action = scenarios[s['id']]
             if 'text' in action and (not action['text'].strip() or len(action['text']) > 4096):
                 raise ValueError('Заполните ответ для сценария с условием (до 4096 символов).')
-            triggers.append((kind, value.casefold(), action))
+            triggers.append((kind, value.casefold() if kind == 'command' else value, action))
     buttons = [(b.get('label'), scenarios.get(b.get('scenarioId'))) for b in bot['buttons'] if isinstance(b, dict)]
     if any(not isinstance(label, str) or not label.strip() or len(label) > 100 or not isinstance(action, dict) or ('text' in action and (not action['text'].strip() or len(action['text']) > 4096)) for label, action in buttons):
         raise ValueError('Добавьте кнопки с непустыми названиями и сценариями (ответ до 4096 символов).')
@@ -98,16 +101,79 @@ def compile_bot(bot):
     return buttons, triggers, events
 
 
+def phrase_hits(value, text):
+    """Фраза-триггер срабатывает по целым словам (без учёта регистра):
+    «кот» не срабатывает на «скот», «привет» — на «приветствую».
+    Фразы без букв и цифр (смайлы, «!!!») ищутся как подстрока."""
+    if any(ch.isalnum() for ch in value):
+        return re.search(r"(?<!\w)" + re.escape(value) + r"(?!\w)", text, re.IGNORECASE) is not None
+    return value.casefold() in text.casefold()
+
+
 def match_action(text, buttons, triggers):
     first = text.split()[0].split("@")[0].casefold() if text.split() else ""
     action = next((a for kind, value, a in triggers if kind == "command" and value == first), None)
     if action is None: action = next((a for label, a in buttons if label.casefold() == text.casefold()), None)
-    if action is None: action = next((a for kind, value, a in triggers if kind == "contains" and value in text.casefold()), None)
+    if action is None: action = next((a for kind, value, a in triggers if kind == "contains" and phrase_hits(value, text)), None)
     return first == "/start", action
 
 
 def action_text(action):
     return random.choice(action["replies"]) if "replies" in action else action.get("text", "")
+
+
+class TgError(RuntimeError):
+    """Ошибка Telegram API с понятной причиной (токен в текст не попадает).
+    kind: 'token' — Telegram не принял токен; 'offline' — нет сети;
+    'api' — прочие ошибки API (в message — description из ответа)."""
+    def __init__(self, message, kind='api', code=None):
+        super().__init__(message)
+        self.kind = kind
+        self.code = code
+
+
+def reason(exc):
+    """Причина ошибки для журнала."""
+    if isinstance(exc, TgError):
+        return str(exc) if str(exc) else exc.kind
+    return exc.__class__.__name__
+
+
+def connect_error(exc):
+    """Ошибка первого подключения: различаем токен и сеть."""
+    if isinstance(exc, TgError):
+        if exc.kind == 'token':
+            return 'Токен не принят Telegram. Проверьте токен в @BotFather.'
+        if exc.kind == 'offline':
+            return 'Нет связи с api.telegram.org. Проверьте интернет.'
+        return f'Не удалось подключить бота: {exc}'
+    return 'Не удалось подключить бота. Проверьте токен и интернет.'
+
+
+def poll_error(exc):
+    """Ошибка в цикле опроса: не путаем её со сбоями отправки."""
+    if isinstance(exc, TgError):
+        if exc.kind == 'offline':
+            return 'Пропала связь с Telegram. Повторная попытка через 5 секунд.'
+        return f'Ошибка Telegram: {exc}. Повторная попытка через 5 секунд.'
+    return 'Ошибка связи с Telegram. Повторная попытка через 5 секунд. Проверьте сеть и убедитесь, что бот не запущен в другом месте.'
+
+
+def schedule_due(now, events, sent, window=10):
+    """Индексы событий, которые пора отправить: точное время + окно допуска
+    window минут (пропущенный тик не теряет событие), один раз в день."""
+    due = []
+    now_min = now.hour * 60 + now.minute
+    today = now.strftime('%Y-%m-%d')
+    for index, (time_label, chat, days, action) in enumerate(events):
+        hh, _, mm = time_label.partition(':')
+        sched = int(hh) * 60 + int(mm)
+        if now.weekday() not in days or not 0 <= now_min - sched < window:
+            continue
+        if sent.get(index) == today:
+            continue
+        due.append(index)
+    return due
 
 
 class Runtime:
@@ -120,15 +186,28 @@ class Runtime:
         self.request = request or self.telegram
         self.animation_slots = threading.BoundedSemaphore(5)
         self.logs = deque(maxlen=100)
+        self._last = None  # (token, bot) последнего запуска — для «Перезапустить»
 
     @staticmethod
     def telegram(token, method, payload):
         request = urllib.request.Request('https://api.telegram.org/bot' + token + '/' + method,
             data=json.dumps(payload).encode(), headers={'Content-Type': 'application/json'})
-        with urllib.request.urlopen(request, timeout=35) as response:
-            result = json.load(response)
+        try:
+            with urllib.request.urlopen(request, timeout=35) as response:
+                result = json.load(response)
+        except urllib.error.HTTPError as exc:
+            description = ''
+            try:
+                body = json.load(exc)
+                description = str(body.get('description') or '')
+            except Exception:
+                pass
+            kind = 'token' if exc.code in (401, 404) else 'api'
+            raise TgError(description or f'HTTP {exc.code}', kind, exc.code) from None
+        except (urllib.error.URLError, OSError, TimeoutError):
+            raise TgError('нет сети', 'offline') from None
         if not result.get('ok'):
-            raise ValueError('Telegram API error')
+            raise TgError(str(result.get('description') or 'Telegram API error'), 'api')
         return result['result']
 
     def status(self):
@@ -148,6 +227,7 @@ class Runtime:
                 raise ValueError('Бот уже запущен или останавливается.')
             self.stop_event = threading.Event()
             self.state, self.error = 'starting', ''
+            self._last = (token, bot)
             self.logs.append(datetime.now().strftime('%H:%M:%S') + ' Запуск бота')
             self.thread = threading.Thread(target=self.run, args=(token, buttons, triggers, events, self.stop_event), daemon=True)
             self.thread.start()
@@ -158,6 +238,23 @@ class Runtime:
                 self.stop_event.set()
                 self.state = 'stopping'
                 self.logs.append(datetime.now().strftime('%H:%M:%S') + ' Остановка бота')
+
+    def restart(self, token=None, bot=None):
+        """Перезапуск одной кнопкой: остановить, дождаться и запустить снова.
+        Пустой токен = токен из памяти последнего запуска (не сохраняется на диск)."""
+        self.stop()
+        deadline = time.time() + 10
+        while time.time() < deadline:
+            with self.lock:
+                if not (self.thread and self.thread.is_alive()):
+                    break
+            time.sleep(0.2)
+        with self.lock:
+            if self.thread and self.thread.is_alive():
+                raise ValueError('Бот ещё останавливается — попробуйте через несколько секунд.')
+        if not token and self._last:
+            token, bot = self._last
+        self.start(token, bot)
 
     def run(self, token, buttons, triggers, events, stop):
         try:
@@ -170,54 +267,72 @@ class Runtime:
             keyboard = {'keyboard': [[{'text': label}] for label, _ in buttons], 'resize_keyboard': True}
             while not stop.is_set():
                 try:
-                    payload = {'timeout': 20, 'allowed_updates': ['message']}
+                    payload = {'timeout': 5, 'allowed_updates': ['message']}
                     if offset is not None: payload['offset'] = offset
                     updates = self.request(token, 'getUpdates', payload)
                     for update in updates:
-                        offset = update['update_id'] + 1
-                        message = update.get('message', {})
-                        chat = message.get('chat', {})
-                        text = message.get('text', '')
-                        if not chat.get('id') or not isinstance(text, str): continue
-                        self.log(f"Получено сообщение · chat ID {chat['id']}")
-                        is_start, action = match_action(text, buttons, triggers)
-                        if is_start and action is None and buttons:
-                            self.request(token, 'sendMessage', {'chat_id': chat['id'], 'text': 'Выберите кнопку:', 'reply_markup': keyboard})
-                        elif action:
-                            self.log('Получено сообщение: найден сценарий')
-                            inline = action.get('inline')
-                            if is_start and buttons and inline:
-                                self.request(token, 'sendMessage', {'chat_id': chat['id'], 'text': 'Выберите кнопку:', 'reply_markup': keyboard})
-                            markup = inline or (keyboard if is_start and buttons else None)
-                            if 'animation' in action:
-                                if self.animation_slots.acquire(blocking=False):
-                                    user = message.get('from', {}).get('first_name', '')
-                                    threading.Thread(target=self.animate, args=(token, chat['id'], action['animation'], user, stop, markup), daemon=True).start()
-                                else:
-                                    self.request(token, 'sendMessage', {'chat_id': chat['id'], 'text': 'Слишком много анимаций, попробуйте позже.'})
-                            else:
-                                body = {'chat_id': chat['id'], 'text': action_text(action)}
-                                if markup: body['reply_markup'] = markup
-                                self.request(token, 'sendMessage', body)
+                        try:
+                            self.handle_update(token, update, buttons, triggers, keyboard, stop)
+                        except Exception as exc:
+                            # Сбой ответа ОДНОМУ пользователю не должен терять
+                            # остальной пакет сообщений (W1): пишем причину и идём дальше.
+                            chat_id = update.get('message', {}).get('chat', {}).get('id', '?')
+                            self.log(f'Не удалось ответить · chat ID {chat_id}: {reason(exc)}')
+                    if updates:
+                        # offset двигаем только после полной обработки пакета
+                        offset = max(u['update_id'] for u in updates) + 1
                     with self.lock: self.error = ''
-                except Exception:
-                    with self.lock: self.error = 'Ошибка связи с Telegram. Повторная попытка через 5 секунд. Проверьте сеть и убедитесь, что бот не запущен в другом месте.'
+                except Exception as exc:
+                    with self.lock: self.error = poll_error(exc)
                     stop.wait(5)
-        except Exception:
-            with self.lock: self.error = 'Не удалось подключить бота. Проверьте токен и интернет.'
+        except Exception as exc:
+            with self.lock: self.error = connect_error(exc)
         finally:
             with self.lock: self.state = 'stopped'
 
+    def handle_update(self, token, update, buttons, triggers, keyboard, stop):
+        """Одно входящее сообщение: /chatid, /start, команды, кнопки, фразы."""
+        message = update.get('message', {})
+        chat = message.get('chat', {})
+        text = message.get('text', '')
+        if not chat.get('id') or not isinstance(text, str): return
+        chat_id = chat['id']
+        self.log(f"Получено сообщение · chat ID {chat_id}")
+        stripped = text.strip()
+        if stripped and stripped.split()[0].split("@")[0].casefold() == '/chatid':
+            self.request(token, 'sendMessage', {'chat_id': chat_id, 'text': f'Ваш chat ID: {chat_id}'})
+            self.log(f'Команда /chatid · chat ID {chat_id}')
+            return
+        is_start, action = match_action(text, buttons, triggers)
+        if is_start and action is None and buttons:
+            self.request(token, 'sendMessage', {'chat_id': chat_id, 'text': 'Выберите кнопку:', 'reply_markup': keyboard})
+            return
+        if action is None:
+            self.log('Подходящий сценарий не найден')
+            return
+        name = action.get('name') or ''
+        self.log(f'Найден сценарий «{name}»' if name else 'Найден сценарий')
+        inline = action.get('inline')
+        if is_start and buttons and inline:
+            self.request(token, 'sendMessage', {'chat_id': chat_id, 'text': 'Выберите кнопку:', 'reply_markup': keyboard})
+        markup = inline or (keyboard if is_start and buttons else None)
+        if 'animation' in action:
+            if self.animation_slots.acquire(blocking=False):
+                user = message.get('from', {}).get('first_name', '')
+                threading.Thread(target=self.animate, args=(token, chat_id, action['animation'], user, stop, markup), daemon=True).start()
+            else:
+                self.request(token, 'sendMessage', {'chat_id': chat_id, 'text': 'Слишком много анимаций, попробуйте позже.'})
+        else:
+            body = {'chat_id': chat_id, 'text': action_text(action)}
+            if markup: body['reply_markup'] = markup
+            self.request(token, 'sendMessage', body)
 
     def schedule_loop(self, token, events, stop):
         sent = {}
         while not stop.is_set():
             now = datetime.now()
-            for index, (time_label, chat, days, action) in enumerate(events):
-                key = now.strftime('%Y-%m-%d')
-                if now.weekday() not in days or now.strftime('%H:%M') != time_label or sent.get(index) == key:
-                    continue
-                sent[index] = key
+            for index in schedule_due(now, events, sent):
+                time_label, chat, days, action = events[index]
                 try:
                     if 'animation' in action:
                         if self.animation_slots.acquire(blocking=False):
@@ -227,9 +342,12 @@ class Runtime:
                         body = {'chat_id': chat, 'text': action_text(action)}
                         if action.get('inline'): body['reply_markup'] = action['inline']
                         self.request(token, 'sendMessage', body)
+                    # Помечаем отправленным ТОЛЬКО после успеха: при сбое
+                    # отправка повторится в окне допуска (W8).
+                    sent[index] = now.strftime('%Y-%m-%d')
                     self.log('Выполнено напоминание')
-                except Exception:
-                    self.log('Ошибка отправки напоминания; проверьте chat ID и подключение')
+                except Exception as exc:
+                    self.log(f'Ошибка отправки напоминания ({reason(exc)}); повтор в окне допуска')
             stop.wait(5)
 
     def animate(self, token, chat_id, spec, user, stop, markup=None):
@@ -261,7 +379,28 @@ class Handler(SimpleHTTPRequestHandler):
         super().__init__(*args, directory=str(ROOT), **kwargs)
 
     def valid_host(self):
-        return self.headers.get('Host') == f'{self.server.server_address[0]}:{self.server.server_port}'
+        host = self.headers.get('Host', '')
+        try:
+            parsed = urlsplit('//' + host)
+            name = (parsed.hostname or '').lower()
+            port = parsed.port
+        except ValueError:
+            return False
+        if port is not None and port != self.server.server_port:
+            return False
+        # localhost и IPv6-петля теперь тоже работают (W3)
+        allowed = {'127.0.0.1', 'localhost', '::1'}
+        bind = str(self.server.server_address[0])
+        if bind and bind != '0.0.0.0':
+            allowed.add(bind)
+        return name in allowed
+
+    def send_error(self, code, message=None, explain=None):
+        if code == 403:
+            extra = ('BotControl — локальное приложение. Откройте '
+                     'http://127.0.0.1:%d/ напрямую.' % self.server.server_port)
+            explain = (explain + ' ' if explain else '') + extra
+        super().send_error(code, message, explain)
 
     def send_json(self, code, data):
         raw = json.dumps(data, ensure_ascii=False).encode()
@@ -290,6 +429,7 @@ class Handler(SimpleHTTPRequestHandler):
             if not isinstance(data, dict): raise ValueError('Некорректный запрос.')
             if self.path == '/api/start': runtime.start(data.get('token'), data.get('bot'))
             elif self.path == '/api/stop': runtime.stop()
+            elif self.path == '/api/restart': runtime.restart(data.get('token'), data.get('bot'))
             elif self.path == '/api/validate-bot':
                 compile_bot(data.get('bot'))
                 return self.send_json(200, {'ok': True})
@@ -328,7 +468,9 @@ def main():
     try:
         server = ThreadingHTTPServer((str(address), args.port), Handler)
     except OSError as exc:
-        parser.exit(1, f'Cannot start server: {exc}\n')
+        parser.exit(1, f'Не удалось запустить сервер: {exc}\n'
+            f'Порт {args.port} занят? Скорее всего, BotControl уже запущен — '
+            f'закройте старый экземпляр (консоль или окно программы).\n')
     url = f'http://{address}:{server.server_port}/'
     if address != ipaddress.IPv4Address('127.0.0.1'):
         print('WARNING: LAN mode has no authentication or encryption. Use only a trusted network.', flush=True)
