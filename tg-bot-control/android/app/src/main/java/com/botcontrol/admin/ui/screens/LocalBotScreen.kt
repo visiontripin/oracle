@@ -55,6 +55,7 @@ fun LocalBotScreen(
     onLlmChat: () -> Unit,
     onOpenScript: (Int) -> Unit,
     onReminders: () -> Unit,
+    onButtons: () -> Unit,
     onPacks: () -> Unit,
     onAiSettings: () -> Unit,
     onBotSettings: () -> Unit,
@@ -73,7 +74,6 @@ fun LocalBotScreen(
         ?: com.botcontrol.admin.service.LocalBotState(botId = activeId)
 
     var rules by remember { mutableStateOf<List<BotRuleEntity>>(emptyList()) }
-    var keyboard by remember { mutableStateOf<List<String>>(emptyList()) }
     var llmEnabled by remember { mutableStateOf(false) }
     var systemPrompt by remember { mutableStateOf("") }
     var defaultReply by remember { mutableStateOf("") }
@@ -81,14 +81,11 @@ fun LocalBotScreen(
     var message by remember { mutableStateOf("") }
     var showAddRule by remember { mutableStateOf(false) }
     var editingRule by remember { mutableStateOf<BotRuleEntity?>(null) }
-    var showAddButton by remember { mutableStateOf(false) }
-    var editingButton by remember { mutableStateOf<String?>(null) }
     var packs by remember { mutableStateOf<List<com.botcontrol.admin.data.ReplyPack>>(emptyList()) }
 
     fun load() {
         scope.launch {
             rules = repository.botRules(localStore.activeBotId())
-            keyboard = localStore.keyboard()
             packs = localStore.packs()
             llmEnabled = localStore.llmEnabled()
             systemPrompt = localStore.systemPrompt()
@@ -202,30 +199,9 @@ fun LocalBotScreen(
             Text("+ Добавить команду")
         }
 
-        // ---- keyboard buttons ----
-        SectionTitle("Кнопки бота (клавиатура в Telegram)")
-        Text("Кнопки показываются под полем ввода. Нажатие шлёт текст кнопки — добавь правило с типом «Кнопка» для реакции.",
-            style = MaterialTheme.typography.bodySmall)
-        Spacer(Modifier.height(4.dp))
-        if (keyboard.isEmpty()) {
-            Text("Кнопок пока нет.", style = MaterialTheme.typography.bodySmall)
-        }
-        keyboard.forEach { label ->
-            Card(Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
-                Row(Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text("🔘 $label", Modifier.weight(1f))
-                    TextButton(onClick = { editingButton = label }) { Text("✎") }
-                    TextButton(onClick = { confirm.value = ConfirmRequest("Удалить кнопку?", "«$label»") {
-                        scope.launch {
-                            localStore.setKeyboard(keyboard - label)
-                            load()
-                        }
-                    } }) { Text("✕") }
-                }
-            }
-        }
-        OutlinedButton(onClick = { showAddButton = true }, modifier = Modifier.fillMaxWidth()) {
-            Text("+ Добавить кнопку")
+        // Кнопки настраиваются в одном месте, вместе с действием.
+        OutlinedButton(onClick = onButtons, modifier = Modifier.fillMaxWidth()) {
+            Text("🔘 Настроить кнопки бота")
         }
 
         // ---- AI ----
@@ -335,17 +311,19 @@ fun LocalBotScreen(
         LaunchedEffect(Unit) { packs = localStore.packs() }
         AlertDialog(
             onDismissRequest = { showAddRule = false; editingRule = null },
-            title = { Text(if (initial == null) "Новое правило" else "Изменить правило") },
+            title = { Text(if (initial == null) "Добавить ответ" else "Изменить ответ") },
             text = {
                 Column(Modifier.verticalScroll(rememberScrollState())) {
+                    Text("1. Когда бот должен ответить?", style = MaterialTheme.typography.titleSmall)
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         FilterChip(selected = type == "command",
                             onClick = { type = "command" }, label = { Text("Команда /…") })
                         FilterChip(selected = type == "contains",
                             onClick = { type = "contains" }, label = { Text("Содержит") })
-                        FilterChip(selected = type == "button",
-                            onClick = { type = "button" }, label = { Text("Кнопка") })
                     }
+                    FilterChip(selected = type == "button",
+                        onClick = { type = "button" }, label = { Text("Нажатие кнопки") })
+                    Text("Для кнопки удобнее выбрать надпись и действие в разделе «Кнопки бота».", style = MaterialTheme.typography.bodySmall)
                     Spacer(Modifier.height(8.dp))
                     OutlinedTextField(
                         pattern, { pattern = it },
@@ -357,17 +335,20 @@ fun LocalBotScreen(
                         singleLine = true, modifier = Modifier.fillMaxWidth(),
                     )
                     Spacer(Modifier.height(8.dp))
+                    Text("2. Что должен сделать бот?", style = MaterialTheme.typography.titleSmall)
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         FilterChip(selected = action == "text",
                             onClick = { action = "text" }, label = { Text("Текст") })
                         FilterChip(selected = action == "pack",
                             onClick = { action = "pack" }, label = { Text("Набор") })
-                        FilterChip(selected = action == "script",
-                            onClick = { action = "script" }, label = { Text("Скрипт JS") })
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        FilterChip(selected = action == "script",
+                            onClick = { action = "script" }, label = { Text("Скрипт JS") })
                         FilterChip(selected = action == "anim",
                             onClick = { action = "anim" }, label = { Text("🎞 Анимация") })
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         FilterChip(selected = action == "dice",
                             onClick = { action = "dice" }, label = { Text("🎲 Кубик") })
                         FilterChip(selected = action == "llm",
@@ -465,45 +446,7 @@ fun LocalBotScreen(
         )
     }
 
-    // ---- add/edit keyboard button dialog ----
-    if (showAddButton || editingButton != null) {
-        var label by remember { mutableStateOf(editingButton ?: "") }
-        AlertDialog(
-            onDismissRequest = { showAddButton = false; editingButton = null },
-            title = { Text(if (editingButton == null) "Новая кнопка" else "Изменить кнопку") },
-            text = {
-                Column {
-                    OutlinedTextField(
-                        label, { label = it },
-                        label = { Text("Надпись на кнопке") },
-                        placeholder = { Text("Например: 🎲 Анекдот") },
-                        singleLine = true, modifier = Modifier.fillMaxWidth(),
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    Text("Далее создай правило с типом «Кнопка» и тем же текстом — оно выполнит действие.",
-                        style = MaterialTheme.typography.bodySmall)
-                }
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        scope.launch {
-                            val next = if (editingButton == null) keyboard + label.trim()
-                            else keyboard.map { if (it == editingButton) label.trim() else it }
-                            localStore.setKeyboard(next)
-                            showAddButton = false
-                            editingButton = null
-                            load()
-                        }
-                    },
-                    enabled = label.isNotBlank(),
-                ) { Text(if (editingButton == null) "Добавить" else "Сохранить") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showAddButton = false; editingButton = null }) { Text("Отмена") }
-            },
-        )
-    }
+
 }
 
 private suspend fun delay800() = kotlinx.coroutines.delay(800)

@@ -161,6 +161,7 @@ fun NavGraph(
                 onLlmChat = { nav.navigate(Routes.LLM_CHAT) },
                 onOpenScript = { id -> nav.navigate("script/$id") },
                 onReminders = { nav.navigate(Routes.REMINDERS) },
+                onButtons = { nav.navigate(Routes.BUTTONS) },
                 onPacks = { nav.navigate(Routes.PACKS) },
                 onAiSettings = { nav.navigate(Routes.AI_SETTINGS) },
                 onBotSettings = { nav.navigate(Routes.BOT_SETTINGS) },
