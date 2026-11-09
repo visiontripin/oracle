@@ -1,0 +1,87 @@
+name: BotControl Windows
+
+on:
+  push:
+    branches: ["arena/**", "main"]
+    paths:
+      - "tg-bot-control/desktop-web/**"
+      - ".github/workflows/botcontrol-windows.yml"
+  pull_request:
+    paths:
+      - "tg-bot-control/desktop-web/**"
+      - ".github/workflows/botcontrol-windows.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Test runtime
+        working-directory: tg-bot-control/desktop-web
+        run: |
+          python -m unittest -v
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node test-generated.js
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Build executable
+        working-directory: tg-bot-control/desktop-web
+        shell: pwsh
+        run: |
+          python -m pip install pyinstaller==6.11.1
+          python -m PyInstaller --noconfirm --clean --onefile --name BotControl --add-data "index.html;." --add-data "style.css;." --add-data "app.js;." --add-data "generated.js;." server.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Smoke test executable
+        working-directory: tg-bot-control/desktop-web
+        shell: pwsh
+        run: |
+          $process = Start-Process -FilePath (Resolve-Path dist/BotControl.exe) -ArgumentList '--no-browser', '--port', '18765' -PassThru
+          try {
+            $ready = $false
+            for ($i = 0; $i -lt 30; $i++) {
+              Start-Sleep -Seconds 1
+              if ($process.HasExited) { throw 'BotControl.exe exited unexpectedly' }
+              try {
+                $page = Invoke-WebRequest -Uri 'http://127.0.0.1:18765/' -UseBasicParsing -TimeoutSec 2
+                $js = Invoke-WebRequest -Uri 'http://127.0.0.1:18765/app.js' -UseBasicParsing -TimeoutSec 2
+                $generated = Invoke-WebRequest -Uri 'http://127.0.0.1:18765/generated.js' -UseBasicParsing -TimeoutSec 2
+                $status = Invoke-RestMethod -Uri 'http://127.0.0.1:18765/api/status' -TimeoutSec 2
+                if ($page.Content -match 'BotControl' -and $js.Content -match 'runtimeStatus' -and $generated.Content -match 'GENERATED_PROMPT' -and $status.state -eq 'stopped') { $ready = $true; break }
+              } catch { }
+            }
+            if (-not $ready) { throw 'BotControl.exe did not serve its assets and status' }
+          } finally {
+            if (-not $process.HasExited) { Stop-Process -Id $process.Id -Force }
+          }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BotControl-Windows
+          path: tg-bot-control/desktop-web/dist/BotControl.exe
+          if-no-files-found: error
+          retention-days: 30
+      - name: Publish Windows preview
+        if: github.event_name == 'push' && contains(github.event.head_commit.message, '[win]')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = 'botcontrol-windows-preview-0.5.0'
+          $exe = 'tg-bot-control/desktop-web/dist/BotControl.exe'
+          $hash = (Get-FileHash $exe -Algorithm SHA256).Hash.ToLower()
+          $notes = @"
+          Экспериментальная локальная версия для Windows. Python не требуется. Откройте BotControl.exe, затем используйте браузер. Консольное окно должно оставаться открытым.
+
+          Добавлены промпт и проверяемый импорт JSON-настроек от языковой модели. Реализованы команды и реакции на фразы, текстовые сценарии и анимации, шаблоны, клавиатура, импорт нумерованных ответов, формат .bc и обмен анимациями .bca. Есть базовые напоминания, ссылки под сообщениями, наборы ответов, имитация и частичный импорт списков из .py. Это не полная версия Android: импорт .py ограничен списками, .bc несовместим с Android, callback-кнопки не поддерживаются. Реальный Telegram-бот в CI не проверялся. Файл не подписан.
+
+          SHA-256: $hash
+          "@
+          $notes | Set-Content -Encoding utf8 windows-release-notes.txt
+          gh release create $tag $exe --target $env:GITHUB_SHA --prerelease --title 'BotControl для Windows — предварительная версия 0.5.0' --notes-file windows-release-notes.txt
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

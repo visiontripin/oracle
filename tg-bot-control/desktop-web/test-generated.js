@@ -1,0 +1,13 @@
+'use strict';
+const assert = require('node:assert/strict');
+const {parseGenerated, GENERATED_PROMPT} = require('./generated.js');
+const example = GENERATED_PROMPT.split('Пример:\n')[1].split('\n\nОписание')[0];
+const bot = parseGenerated(example);
+assert.equal(bot.format, 'botcontrol');
+assert.equal(bot.scenarios[0].trigger.value, '/start');
+assert.deepEqual(parseGenerated('```json\n' + example + '\n```'), bot);
+assert.throws(() => parseGenerated('Текст до JSON\n' + example), /JSON/);
+assert.throws(() => parseGenerated(example.replace('"version":1', '"version":1,"token":"secret"')), /Неподдерживаемые поля/);
+assert.throws(() => parseGenerated(example.replace('"name":"Помощь","text"', '"name":"Помощь","script":"alert(1)","text"')), /Неподдерживаемые поля/);
+assert.throws(() => parseGenerated('x'.repeat(900001)), /слишком большой/);
+console.log('Generated import tests passed');
