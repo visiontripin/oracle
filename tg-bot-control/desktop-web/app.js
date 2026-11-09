@@ -70,3 +70,31 @@ $('simulate').onclick=async()=>{try{const response=await fetch('/api/simulate',{
 
 $('importPython').onclick=()=>$('pythonFile').click();
 $('pythonFile').onchange=async e=>{const f=e.target.files[0];e.target.value='';if(!f)return;try{if(f.size>512000)throw Error('Файл больше 512 КБ.');const source=await f.text();const response=await fetch('/api/import-python',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({source})});const data=await response.json();if(!response.ok)throw Error(data.error);if(!data.packs.length)throw Error('Буквальные списки ответов не найдены.');if(!confirm(`Найдено списков: ${data.packs.length}. Добавить их как наборы ответов? Команды, кнопки, сценарии и расписание НЕ переносятся.`))return;data.packs.forEach(p=>bot.scenarios.push({id:id(),name:p.name,text:'',replies:p.items}));save();render();$('notice').textContent=`Добавлено наборов: ${data.packs.length}. Остальные настройки .py не импортированы.`;}catch(err){$('notice').textContent='Ошибка импорта: '+err.message;}};
+
+$('generationPrompt').value=GENERATED_PROMPT;
+$('copyPrompt').onclick=async()=>{
+  const prompt=$('generationPrompt');
+  try {
+    if (!navigator.clipboard || !window.isSecureContext) throw Error();
+    await navigator.clipboard.writeText(prompt.value);
+    $('generatedStatus').textContent='Промпт скопирован. Замените описание в его конце.';
+  } catch (_) {
+    prompt.focus(); prompt.select();
+    $('generatedStatus').textContent='Промпт выделен: скопируйте его вручную (Ctrl+C).';
+  }
+};
+async function importGenerated(text) {
+  const status=$('generatedStatus');
+  try {
+    const candidate=validate(parseGenerated(text));
+    const response=await fetch('/api/validate-bot', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({bot:candidate})});
+    const result=await response.json();
+    if(!response.ok)throw Error(result.error || 'Не удалось проверить настройки.');
+    if(!confirm(`Найден бот «${candidate.name}»: сценариев ${candidate.scenarios.length}, кнопок ${candidate.buttons.length}, напоминаний ${(candidate.schedule||[]).length}. Импорт заменит текущего бота в редакторе. Продолжить?`)) {status.textContent='Импорт отменён; текущий бот не изменён.';return;}
+    bot=candidate;save();render();
+    status.textContent='Бот импортирован. Проверьте сценарии и перезапустите бота, если он работает.';
+  } catch(err){status.textContent='Ошибка импорта: '+err.message;}
+}
+$('importGenerated').onclick=()=>importGenerated($('generatedInput').value);
+$('importGeneratedFile').onclick=()=>$('generatedFile').click();
+$('generatedFile').onchange=async e=>{const f=e.target.files[0];e.target.value='';if(!f)return;try{if(f.size>900000)throw Error('Файл слишком большой: максимум 900 КБ.');await importGenerated(await f.text());}catch(err){$('generatedStatus').textContent='Ошибка импорта: '+err.message;}};

@@ -212,6 +212,17 @@ class HttpTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertEqual(json.loads(body)['packs'][0]['items'], ['A','B'])
 
+    def test_validate_generated_bot(self):
+        headers = {'Content-Type': 'application/json', 'Origin': f'http://127.0.0.1:{self.port}'}
+        bot = {'format':'botcontrol', 'version':1, 'name':'Тест', 'scenarios':[{'id':'s','name':'Привет','text':'Привет!', 'trigger':{'type':'command','value':'/start'}}], 'buttons':[], 'schedule':[]}
+        status, body = self.request('POST', '/api/validate-bot', headers, json.dumps({'bot':bot}))
+        self.assertEqual(status, 200)
+        self.assertTrue(json.loads(body)['ok'])
+        bot['scenarios'][0]['trigger']['value'] = 'не команда'
+        status, body = self.request('POST', '/api/validate-bot', headers, json.dumps({'bot':bot}))
+        self.assertEqual(status, 400)
+        self.assertIn('Команда', json.loads(body)['error'])
+
     def test_public_bind_rejected(self):
         result = subprocess.run([sys.executable, 'server.py', '--host', '0.0.0.0', '--no-browser'], capture_output=True, text=True, timeout=5)
         self.assertNotEqual(result.returncode, 0)

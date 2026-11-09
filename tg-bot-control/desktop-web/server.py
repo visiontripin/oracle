@@ -275,7 +275,7 @@ class Handler(SimpleHTTPRequestHandler):
     def do_GET(self):
         if not self.valid_host(): return self.send_error(403)
         if self.path == '/api/status': return self.send_json(200, runtime.status())
-        if self.path not in ('/', '/index.html', '/style.css', '/app.js'):
+        if self.path not in ('/', '/index.html', '/style.css', '/app.js', '/generated.js'):
             return self.send_error(404)
         return super().do_GET()
 
@@ -290,6 +290,9 @@ class Handler(SimpleHTTPRequestHandler):
             if not isinstance(data, dict): raise ValueError('Некорректный запрос.')
             if self.path == '/api/start': runtime.start(data.get('token'), data.get('bot'))
             elif self.path == '/api/stop': runtime.stop()
+            elif self.path == '/api/validate-bot':
+                compile_bot(data.get('bot'))
+                return self.send_json(200, {'ok': True})
             elif self.path == '/api/import-python':
                 return self.send_json(200, {'packs': extract_lists(data.get('source'))})
             elif self.path == '/api/simulate':
